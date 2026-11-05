@@ -4,6 +4,8 @@
 
 > Unofficial fan project, made with Lachy's permission. Not endorsed by CD Projekt Red, the anime's rights holders or its voice actors. Free and non-commercial.
 
+https://github.com/fadievr/capri-BD-VR/releases
+
 ## Install (sideload)
 
 1. **Turn on Developer Mode.** Make a free account at [developers.meta.com](https://developers.meta.com/horizon/sign-up), then in the Meta Horizon phone app go to **Devices → your Quest → Developer Mode → On**.
