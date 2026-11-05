@@ -32,7 +32,7 @@ Capri prohibits cloning or impersonating a living person's voice without explici
 
 | Control | What it does |
 |---|---|
-| **Grip** near her (or pinch with bare hands) | Pick her up. Let go to drop her, or swing and let go to throw her. |
+| **Grip** near her (or pinch with bare hands) | Pick her up. Let go to drop her, or swing and let go to throw her: she spins, bounces and can land dizzy. You can catch her mid-air. Throw her three times in two minutes and she sulks until you say sorry or pat her head. |
 | **Thumbstick** while holding her | Resize her. |
 | Put her down **next to a ledge** | She sits on the edge. |
 | Gentle hand near her head / fast swipe | Pet / poke. |

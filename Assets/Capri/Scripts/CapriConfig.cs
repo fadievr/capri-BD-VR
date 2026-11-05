@@ -63,6 +63,8 @@ namespace CapriRoom
         public static readonly Vector2[] PopGaps = { Vector2.zero, new Vector2(480, 900), new Vector2(180, 360) };
         public static int PopIns { get { return Get("popins", 1); } set { Set("popins", value); } }
         public static bool GlitchIn { get { return Get("glitchin", 1) == 1; } set { Set("glitchin", value ? 1 : 0); } }
+        // Motion: she tumbles when thrown and sways when dizzy. Off for reduced motion, like the desktop app's setting.
+        public static bool Motion { get { return Get("motion", 1) == 1; } set { Set("motion", value ? 1 : 0); } }
         public static readonly string[] SizeNames = { "Tiny", "Small", "Medium", "Large", "Huge", "Life size" };
         public static readonly float[] SizeValues = { .25f, .38f, .5f, .7f, 1f, 1.6f };
         public static readonly string[] BubbleNames = { "Short", "Normal", "Long" };

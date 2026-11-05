@@ -119,6 +119,26 @@ namespace CapriRoom
             return ground;
         }
 
+        // Thrown, she bounces off the walls, the ceiling and the sides of furniture between "from" and "to". Furniture tops and
+        // the floor aren't bounced off here: she lands on those.
+        private const MRUKAnchor.SceneLabels Bouncy = Furniture | MRUKAnchor.SceneLabels.WALL_FACE |
+            MRUKAnchor.SceneLabels.INVISIBLE_WALL_FACE | MRUKAnchor.SceneLabels.INNER_WALL_FACE | MRUKAnchor.SceneLabels.CEILING;
+
+        public bool Bounce(Vector3 from, Vector3 to, out Vector3 normal)
+        {
+            normal = Vector3.zero;
+            if (room == null) return false;
+            Vector3 path = to - from;
+            float length = path.magnitude;
+            if (length < 0.00001f) return false;
+            RaycastHit hit;
+            MRUKAnchor anchor;
+            if (!room.Raycast(new Ray(from, path / length), length + 0.08f, new LabelFilter(Bouncy), out hit, out anchor)) return false;
+            if (hit.normal.y > 0.7f) return false;
+            normal = hit.normal;
+            return true;
+        }
+
         public bool Inside(Vector3 point)
         {
             return room == null || room.IsPositionInRoom(point);

@@ -1,5 +1,24 @@
 # Capri Room patch notes
 
+## v1.0.2 (2026-11-04)
+
+**Added**
+- Throwing, like the desktop app (Capri 0.8.3). Let go while your hand's moving fast and she flies at your throw's speed:
+  - She tumbles the way you threw her, faster the harder it is, then rights herself before she lands.
+  - She bounces off walls, the ceiling, the sides of furniture and the floor.
+  - A hard throw gets a yell ("WHEEEE!"), and a hard landing leaves her dizzy for a moment.
+  - You can catch her mid-air.
+  - Her grudge: a second throw within two minutes gets a warning, and a third makes her sulk. While she sulks she dodges your hand. Say sorry, pat her head, or leave her alone for five minutes to make up.
+- Motion setting (Y → MOVES): turn it off and she doesn't spin or sway.
+
+**Fixed (from Lachy's review of the port)**
+- No default voice: she only talks out loud in a Fish Audio voice you picked. With no voice set, she shows her lines in her bubble and asks you to pick one.
+- Clear then Done in the keyboard now really removes a saved key.
+- Her voice reader stops at a broken WAV chunk instead of looping forever.
+
+**Removed**
+- The Unity menu that downloaded and installed the APK from GitHub releases. Capri → Release → 3. Install built APK on headset installs your own build instead.
+
 ## v1.0.1 (2026-11-03)
 
 **Fixed**

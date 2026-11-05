@@ -12,7 +12,8 @@ namespace CapriRoom
         private const int Rate = 24000;
         public AudioSource Source { get; private set; }
         public bool Busy { get; private set; }
-        public bool Ready { get { return CapriConfig.VoiceService == 1 && !string.IsNullOrEmpty(CapriConfig.FishKey); } }
+        // She only talks in a voice you picked: no Fish voice ID, no voice. Fish's default voice is never used.
+        public bool Ready { get { return CapriConfig.VoiceService == 1 && !string.IsNullOrEmpty(CapriConfig.FishKey) && !string.IsNullOrEmpty(CapriConfig.FishVoiceId); } }
 
         // Robot and Glitch, read by the audio thread.
         private volatile float robot, glitch, boost = 1;
@@ -50,7 +51,7 @@ namespace CapriRoom
             float speed = CapriConfig.SpeedValues[Clamp(CapriConfig.Speed, CapriConfig.SpeedValues)];
             StringBuilder body = new StringBuilder("{\"text\":").Append(CapriBrain.Quote(text));
             string voice = CapriConfig.FishVoiceId;
-            if (!string.IsNullOrEmpty(voice)) body.Append(",\"reference_id\":").Append(CapriBrain.Quote(voice));
+            body.Append(",\"reference_id\":").Append(CapriBrain.Quote(voice));
             body.Append(",\"format\":\"wav\",\"sample_rate\":").Append(Rate);
             body.Append(",\"prosody\":{\"speed\":").Append(speed.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(",\"volume\":0}}");
 
@@ -88,17 +89,22 @@ namespace CapriRoom
             {
                 string id = Encoding.ASCII.GetString(data, at, 4);
                 int size = BitConverter.ToInt32(data, at + 4);
+                // A chunk size that's negative or runs past the end would send the reader backwards or nowhere: stop there.
+                // Only the data chunk may leave its size open, as streamed WAVs do.
+                if (id != "data" && (size < 0 || size > data.Length - at - 8)) return null;
                 if (id == "fmt ")
                 {
+                    if (size < 16) return null;
                     channels = BitConverter.ToInt16(data, at + 10);
                     rate = BitConverter.ToInt32(data, at + 12);
                     bits = BitConverter.ToInt16(data, at + 22);
                 }
                 else if (id == "data")
                 {
-                    if (bits != 16) return null;
+                    if (bits != 16 || channels < 1 || rate < 1) return null;
                     if (size <= 0 || at + 8 + size > data.Length) size = data.Length - at - 8;   // streamed WAVs can leave the size open
                     int count = size / 2;
+                    if (count < channels) return null;
                     float[] samples = new float[count];
                     for (int i = 0; i < count; i++) samples[i] = BitConverter.ToInt16(data, at + 8 + i * 2) / 32768f;
                     AudioClip clip = AudioClip.Create("capri-line", count / channels, channels, rate, false);

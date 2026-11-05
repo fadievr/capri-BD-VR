@@ -117,7 +117,7 @@ namespace CapriRoom
                 case 1:
                     Choice(ref row, "Voice", CapriConfig.Voices, CapriConfig.VoiceService, v => CapriConfig.VoiceService = v);
                     Field(ref row, "Fish Audio key", CapriConfig.Masked(CapriConfig.FishKey), true, v => CapriConfig.FishKey = v);
-                    Field(ref row, "Voice ID or link", string.IsNullOrEmpty(CapriConfig.FishVoice) ? "(Fish default)" : CapriConfig.FishVoiceId, false, v => CapriConfig.FishVoice = v);
+                    Field(ref row, "Voice ID or link", string.IsNullOrEmpty(CapriConfig.FishVoice) ? "(pick one: required)" : CapriConfig.FishVoiceId, false, v => CapriConfig.FishVoice = v);
                     Field(ref row, "Fish model", CapriConfig.FishModel, false, v => CapriConfig.FishModel = v);
                     Choice(ref row, "Hearing", CapriConfig.Hearings, CapriConfig.Hearing, v => CapriConfig.Hearing = v);
                     if (CapriConfig.Hearing == 0) Field(ref row, "Groq key (free)", CapriConfig.Masked(CapriConfig.GroqKey), true, v => CapriConfig.GroqKey = v);
@@ -141,6 +141,7 @@ namespace CapriRoom
                     Choice(ref row, "Size", CapriConfig.SizeNames, pet.SizeIndex, pet.SetSizeIndex);
                     Choice(ref row, "Bubble", CapriConfig.BubbleNames, CapriConfig.Bubble, v => CapriConfig.Bubble = v);
                     Toggle(ref row, "Glitch in at startup", CapriConfig.GlitchIn, v => CapriConfig.GlitchIn = v);
+                    Toggle(ref row, "Motion (spin when thrown)", CapriConfig.Motion, v => CapriConfig.Motion = v);
                     break;
             }
 
@@ -285,7 +286,8 @@ namespace CapriRoom
         private void Finish()
         {
             editing = false;
-            if (typed != null && text.Trim().Length > 0) typed(text.Trim());
+            // Clear then Done saves it empty, so a saved key really is removed.
+            if (typed != null) typed(text.Trim());
             typed = null;
             Changed();
         }

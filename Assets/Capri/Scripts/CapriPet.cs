@@ -2,7 +2,10 @@
 // naps when you ignore her, reacts when you pet, poke, grab or throw her, and talks with you through your headset's mic.
 //
 // Controls
-//   Grab her:    grip button (controllers) or pinch (hand tracking) with your hand near her. Let go to drop or throw her.
+//   Grab her:    grip button (controllers) or pinch (hand tracking) with your hand near her. Let go to drop her.
+//   Throw her:   let go while your hand's moving fast. She tumbles the way you threw her, bounces off walls and the
+//                floor, and a hard landing leaves her dizzy. Three throws in two minutes and she sulks until you say
+//                sorry, pat her head, or leave her alone for five minutes. Like the desktop app (Capri 0.8.3).
 //   Resize her:  while holding her with a controller, push its thumbstick up or down.
 //   Pet her:     move your hand gently near her head.
 //   Talk:        just talk. She listens on the headset's mic (needs a Fish Audio key, or OpenAI as her brain).
@@ -12,6 +15,8 @@
 //   Settings:    Y opens her settings: BRAIN, VOICE, YOU and MOVES.
 //   Put her down next to the edge of a table, couch or bed and she sits on it.
 using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace CapriRoom
@@ -43,7 +48,26 @@ namespace CapriRoom
         private static readonly string[] PokeLines = { "Hey! Personal space, choom.", "Ow. Rude.", "Poke detected. Filing a complaint.", "Do that again and I'm deleting your saves." };
         private static readonly string[] TossLines = { "Did you just throw me?!", "Landing confirmed. Mostly.", "Okay. Never again.", "Ten out of ten. Do it again." };
         private static readonly string[] HoldLines = { "Put me down, choom!", "Hey! Where are we going?", "Careful, I'm fragile code." };
+        // Thrown, from the desktop app (Capri 0.8.3).
+        private static readonly string[] ThrowLines = { "WHEEEE!", "Put me DOWN!", "Choom, I'm not a frisbee!", "AAAAAA!", "Not the hair!" };
+        private static readonly string[] WarnLines = { "Okay, rude.", "Again?! One more and we're fighting.", "Do that again. I dare you." };
+        private static readonly string[] DizzyLines = { "Ugh. Which way is up?", "Everything's spinning, choom.", "My gyro's cooked." };
+        private static readonly string[] SulkLines = { "That's it. Don't touch me.", "Nope. We're done. Hands off." };
+        private static readonly string[] DodgeLines = { "Nope.", "Hands off, choom.", "Say sorry first.", "Not happening." };
+        private static readonly string[] SorryLines = { "...Fine. Apology accepted.", "Okay. We're cool. No more yeeting." };
+        private static readonly string[] PatPeaceLines = { "...Okay, that's cheating. Fine, you're forgiven.", "Hmph. Head pats work. We're cool." };
+        private static readonly string[] AloneLines = { "...Okay, I'm over it.", "Fine. I missed you. A little." };
+        private const string FirstDodgeLine = "No. Don't touch me.";
+        private static readonly Regex SorryWords = new Regex(@"\b(sorry|sry|soz|sowwy|apologi[sz]e|my bad|forgive me|lo siento|perd[oó]n|d[eé]sol[eé]e?|entschuldigung|scusa|desculpa)\b", RegexOptions.IgnoreCase);
+
         private static readonly string[] WakeLines = { "Mm? I'm up. I'm up.", "Was I asleep? Don't tell anyone.", "Rebooting... hi." };
+
+        // Throwing, in metres a second. Slower than ThrowFrom she just drops, from ThrowHard she yells, ThrowMost caps a flick.
+        private const float ThrowFrom = 1.2f, ThrowHard = 2.5f, ThrowMost = 7f;
+        private const float ThrowDrag = 0.6f, WallBounce = 0.55f, FloorBounce = 0.42f, FloorGrip = 0.72f, FlightLongest = 8f;
+        private const float Settle = 1.5f, Calm = 1.5f, DizzyFrom = 2.4f, DizzyFor = 1.8f, DizzySway = 7f;
+        private const float SulkWindow = 120f, SulkAlone = 300f, DodgeSaid = 6f;
+        private const int SulkThrows = 3;
 
         // How far her feet hang below your hand when you hold her (from the dangle art, in sizes).
         private const float DangleDrop = 0.907f;
@@ -75,6 +99,18 @@ namespace CapriRoom
         private CapriVoice speaker;
         private CapriEars ears;
         private float nextPop;
+
+        // Her flight when thrown: her tumble in degrees and degrees a second, how many times she's bounced off the floor, the
+        // hardest she's hit anything, and whether she's already said something about it.
+        private bool thrown, flightLine;
+        private float spin, spinRate, flyHardest;
+        private int flyFloors;
+        private float dizzyFrom = -1, dizzyUntil = -1;
+        // Her grudge: throws in the last two minutes, and when her sulk started and someone last bothered her.
+        private readonly List<float> throwsAt = new List<float>();
+        private float sulkSince = -1, sulkBothered, dodgeSaidAt = -10;
+        private bool sulkLine, dodgedOnce;
+        private bool Sulking { get { return sulkSince >= 0; } }
 
         private bool Wandering { get { return CapriConfig.Wander != 0; } }
         private Vector2 secondsBetweenWanders { get { return CapriConfig.WanderGaps[Mathf.Clamp(CapriConfig.Wander, 0, 3)]; } }
@@ -132,6 +168,7 @@ namespace CapriRoom
             }
 
             Animate();
+            if (Sulking && Time.time - sulkBothered > SulkAlone) MakeUp(AloneLines);
             Interact();
             if (settings.IsOpen) settings.Point(hands.Both);
             Listen();
@@ -148,6 +185,7 @@ namespace CapriRoom
             }
 
             FaceYou();
+            Pose();
             PlaceShadow();
             Mouth();
         }
@@ -180,9 +218,36 @@ namespace CapriRoom
                 }
             }
             sprite.sprite = clip.Frames[frame];
-            // Her art is drawn so one unit is her size; keep the body scaled to it and lifted when she dangles.
+        }
+
+        // Her art is drawn so one unit is her size: the body is scaled to it, lifted when she dangles, tumbles around her middle
+        // when she's thrown, and sways around her hip when she's dizzy.
+        private void Pose()
+        {
+            if (clip == null || sprite.sprite == null) return;
             body.localScale = Vector3.one * size;
-            body.localPosition = clip.Name == "dangle" ? Vector3.up * DangleDrop * size : Vector3.zero;
+            Vector3 lift = clip.Name == "dangle" ? Vector3.up * DangleDrop * size : Vector3.zero;
+            float turn = mode == Mode.Falling && thrown && CapriConfig.Motion ? spin : 0;
+            float sway = Sway();
+            if (turn == 0 && sway == 0)
+            {
+                body.localRotation = Quaternion.identity;
+                body.localPosition = lift;
+                return;
+            }
+            // Turning on screen: clockwise for a throw to your right. She faces away from you, so that's minus around z.
+            Quaternion roll = Quaternion.Euler(0, 0, -(turn + sway));
+            Vector3 pivot = turn != 0 ? sprite.sprite.bounds.center * size : Vector3.up * size * 0.3f;
+            body.localRotation = roll;
+            body.localPosition = lift + pivot - roll * pivot;
+        }
+
+        // Dizzy after a hard landing, her head swims around her hip and settles. Not while she's held or falling.
+        private float Sway()
+        {
+            if (!CapriConfig.Motion || Time.time < dizzyFrom || Time.time >= dizzyUntil || mode == Mode.Held || mode == Mode.Falling) return 0;
+            float fade = Mathf.Min(1, (dizzyUntil - Time.time) / (DizzyFor * 0.6f));
+            return DizzySway * Mathf.Sin((Time.time - dizzyFrom) * Mathf.PI * 2 * 1.3f) * fade;
         }
 
         private void Rest()
@@ -322,8 +387,10 @@ namespace CapriRoom
                 if (hand.ButtonTwoDown && !hand.Left && mode != Mode.Held) { ComeHere(); return; }
                 if (hand.ButtonOneDown && !hand.Left && mode == Mode.Perched) { ToggleDance(); return; }   // no standing dance, only bopping on a ledge
 
-                if (mode != Mode.Held && mode != Mode.Falling && hand.GrabStarted && fromMiddle < reach + 0.1f)
+                // You can catch her mid-air. Sulking, she won't let you: she glitches a hop away instead.
+                if (mode != Mode.Held && hand.GrabStarted && fromMiddle < reach + 0.1f)
                 {
+                    if (Sulking) { if (mode != Mode.Falling) Dodge(hand); return; }
                     PickUp(hand);
                     return;
                 }
@@ -335,6 +402,7 @@ namespace CapriRoom
                 if (!hand.Grabbing && fromHead < Mathf.Max(0.15f, size * 0.3f) && speed > 0.08f && speed < 1.2f)
                 {
                     petHeld += Time.deltaTime;
+                    if (petHeld > 0.6f && Sulking) { petHeld = 0; MakeUp(PatPeaceLines); return; }
                     if (petHeld > 0.6f && Time.time > reactCooldown) { petHeld = 0; React("grin", "perch", Pick(PetLines)); return; }
                 }
             }
@@ -361,25 +429,28 @@ namespace CapriRoom
 
         private void PickUp(HandState hand)
         {
+            bool caught = mode == Mode.Falling;
             holder = hand;
             mode = Mode.Held;
             standingOn = null;
+            thrown = false;
+            spin = spinRate = 0;
             Play("dangle", true);
-            Say(Pick(HoldLines));
+            if (!caught) Say(Pick(HoldLines));
         }
 
         private void Held()
         {
             if (!holder.Tracked || holder.GrabEnded || !holder.Grabbing)
             {
-                velocity = Vector3.ClampMagnitude(holder.Velocity, 6f);
+                velocity = Vector3.ClampMagnitude(holder.Velocity, ThrowMost);
+                float fast = velocity.magnitude;
+                if (fast >= ThrowFrom) { Launch(fast); return; }
                 // Put down gently beside the edge of a table, couch or bed: she sits on it.
-                if (velocity.magnitude < 1.2f)
-                {
-                    Surface ledge = room.LedgeNear(transform.position + Vector3.up * DangleDrop * size * 0.5f, 0.3f);
-                    if (ledge != null) { SitOn(ledge); return; }
-                }
+                Surface ledge = room.LedgeNear(transform.position + Vector3.up * DangleDrop * size * 0.5f, 0.3f);
+                if (ledge != null) { SitOn(ledge); return; }
                 fallStarted = Time.time;
+                thrown = false;
                 mode = Mode.Falling;
                 return;
             }
@@ -392,30 +463,134 @@ namespace CapriRoom
             lastAttention = Time.time;
         }
 
+        // Let go while your hand's still moving fast and she's thrown at its speed. She tumbles the way she's thrown, faster
+        // the harder it is: a throw to your right spins her clockwise, like the desktop app.
+        private void Launch(float fast)
+        {
+            fallStarted = Time.time;
+            mode = Mode.Falling;
+            thrown = true;
+            flightLine = false;
+            flyFloors = 0;
+            flyHardest = fast;
+            dizzyUntil = -1;
+            spin = 0;
+            Vector3 right = RoomSense.Flat(hands.Head.right).normalized;
+            float across = Vector3.Dot(velocity, right), up = velocity.y;
+            spinRate = CapriConfig.Motion ? Mathf.Clamp(across * 280f + (across < 0 ? -1 : 1) * Mathf.Abs(up) * 100f, -1080f, 1080f) : 0;
+            Grudge(fast);
+        }
+
+        // One frame of a fall or a flight. Thrown, there's air drag, she bounces off walls, the ceiling and the sides of
+        // furniture, and off the floor until she's slow enough to land.
         private void Fall()
         {
-            velocity += Physics.gravity * Time.deltaTime;
-            Vector3 next = transform.position + velocity * Time.deltaTime;
+            float dt = Time.deltaTime;
+            velocity += Physics.gravity * dt;
+            if (thrown)
+            {
+                velocity *= Mathf.Exp(-ThrowDrag * dt);
+                Spin(dt);
+            }
+            Vector3 next = transform.position + velocity * dt;
+            Vector3 normal;
+            if (thrown && room.Bounce(MiddlePoint, next + Vector3.up * size * 0.5f, out normal))
+            {
+                float into = Vector3.Dot(velocity, normal);
+                if (into < 0)
+                {
+                    flyHardest = Mathf.Max(flyHardest, -into);
+                    velocity -= (1 + WallBounce) * into * normal;
+                    spinRate = -spinRate * 0.8f;
+                }
+                next = transform.position;
+            }
             float ground = room.GroundBelow(next + Vector3.up * 0.3f);
             if (next.y <= ground && velocity.y <= 0)
             {
+                float impact = -velocity.y;
                 next.y = ground;
                 transform.position = next;
-                bool thrown = Time.time - fallStarted > 0.35f;
+                if (thrown && impact > Settle && flyFloors < 6)
+                {
+                    velocity = new Vector3(velocity.x * FloorGrip, impact * FloorBounce, velocity.z * FloorGrip);
+                    spinRate *= 0.6f;
+                    flyFloors++;
+                    return;
+                }
+                bool flew = thrown || Time.time - fallStarted > 0.35f;
+                bool wasThrown = thrown;
+                Landed(wasThrown);
                 if (!room.Inside(next)) { ComeHere(); return; }
                 if (ground > room.FloorY + 0.15f)
                 {
                     Surface ledge = room.LedgeNear(next, 0.6f);   // landed on furniture: sit on its nearest edge
-                    if (ledge != null) { if (thrown) Say(Pick(TossLines)); SitOn(ledge); return; }
+                    if (ledge != null) { if (flew && !flightLine) Say(Pick(TossLines)); SitOn(ledge); return; }
                 }
                 standingOn = ground > room.FloorY + 0.15f ? new Surface { Point = next, Raised = true } : null;
                 mode = Mode.Reacting;
-                if (thrown) Say(Pick(TossLines));
+                if (flew && !flightLine) Say(Pick(TossLines));
                 Play("glitch", false, Rest);
                 return;
             }
             transform.position = next;
-            if (Time.time - fallStarted > 4f) ComeHere();   // lost somewhere: bring her back
+            if (Time.time - fallStarted > (thrown ? FlightLongest : 4f)) ComeHere();   // lost somewhere: bring her back
+        }
+
+        // Her tumble slows in the air, and once she's slowed down or bounced off the floor she rights herself before she lands.
+        private void Spin(float dt)
+        {
+            if (!CapriConfig.Motion) { spin = spinRate = 0; return; }
+            spin += spinRate * dt;
+            spinRate *= Mathf.Exp(-0.6f * dt);
+            if (flyFloors == 0 && velocity.magnitude >= Calm) return;
+            float off = spin - 360f * Mathf.Round(spin / 360f);
+            spinRate += (-off * 60f - spinRate * 14f) * dt;
+        }
+
+        // Down after a flight: a hard one leaves her dizzy for a beat and gets a word out of her, and the third throw in two
+        // minutes starts her sulk.
+        private void Landed(bool wasThrown)
+        {
+            thrown = false;
+            spin = spinRate = 0;
+            if (!wasThrown) return;
+            bool dizzy = flyHardest >= DizzyFrom;
+            if (dizzy) { dizzyFrom = Time.time; dizzyUntil = Time.time + DizzyFor; }
+            if (sulkLine) { sulkLine = false; Say(Pick(SulkLines)); flightLine = true; }
+            else if (dizzy && throwsAt.Count == 1) { Say(Pick(DizzyLines)); flightLine = true; }
+        }
+
+        // Every throw counts toward her grudge: the second in two minutes gets a warning and the third starts her sulk. A hard
+        // first one gets a yell as she flies.
+        private void Grudge(float fast)
+        {
+            float now = Time.time;
+            throwsAt.RemoveAll(at => now - at > SulkWindow);
+            throwsAt.Add(now);
+            if (throwsAt.Count >= SulkThrows) { throwsAt.Clear(); sulkSince = now; sulkBothered = now; dodgedOnce = false; sulkLine = true; return; }
+            string line = throwsAt.Count == 2 ? Pick(WarnLines) : fast >= ThrowHard ? Pick(ThrowLines) : null;
+            if (line != null) { Say(line); flightLine = true; }
+        }
+
+        // Sulking, she won't be picked up: a grab makes her glitch a short hop away from your hand.
+        private void Dodge(HandState hand)
+        {
+            sulkBothered = Time.time;
+            if (!dodgedOnce) { dodgedOnce = true; dodgeSaidAt = Time.time; Say(FirstDodgeLine); }
+            else if (Time.time - dodgeSaidAt > DodgeSaid) { dodgeSaidAt = Time.time; Say(Pick(DodgeLines)); }
+            Vector3 away = RoomSense.Flat(transform.position - hand.Position);
+            if (away.sqrMagnitude < 0.0001f) away = RoomSense.Flat(transform.position - hands.Head.position);
+            Vector3 spot = room.FloorSpot(transform.position + away.normalized * 0.8f, 0.25f);
+            GlitchTo(new Surface { Point = spot });
+        }
+
+        // A sorry, a head pat or five minutes alone ends her sulk.
+        private void MakeUp(string[] lines)
+        {
+            sulkSince = -1;
+            throwsAt.Clear();
+            Say(Pick(lines));
         }
 
         private void SitOn(Surface ledge)
@@ -463,7 +638,8 @@ namespace CapriRoom
 
         public void TestVoice()
         {
-            if (!speaker.Ready) { Say("Pick Fish Audio and add its key under VOICE first."); return; }
+            if (CapriConfig.VoiceService != 1 || string.IsNullOrEmpty(CapriConfig.FishKey)) { Say("Pick Fish Audio and add its key under VOICE first."); return; }
+            if (string.IsNullOrEmpty(CapriConfig.FishVoiceId)) { Say("Pick my voice first: paste a fish.audio voice link under VOICE."); return; }
             Talk("Testing, testing. Do I sound preem from over here?");
         }
 
@@ -488,6 +664,7 @@ namespace CapriRoom
         private void Heard(string said)
         {
             lastAttention = Time.time;
+            if (Sulking && SorryWords.IsMatch(said)) { MakeUp(SorryLines); return; }
             if (!brain.Ready) { Say("My brain's offline. Press Y and set one up under BRAIN."); return; }
             if (mode == Mode.Napping) { mode = Mode.Waking; Play("wake", false, Rest); }
             bubble.Say("...", 20);
