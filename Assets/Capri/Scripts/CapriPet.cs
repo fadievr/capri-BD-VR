@@ -123,7 +123,7 @@ namespace CapriRoom
         private readonly List<KeyValuePair<float, string>> glanced = new List<KeyValuePair<float, string>>();
         // Asking her to look at something sends her a picture with what you said.
         private string waitingLine;
-        private static readonly Regex Looking = new Regex(@"\b(look(ing)? at|take a look|have a look|see (this|that|it|what)|can you see|what do you see|what am i (holding|looking at|doing|watching|playing)|what('s| is) (this|that|on my|in front)|read (this|that|it)|check (this|that) out|how do i look)\b", RegexOptions.IgnoreCase);
+        private static readonly Regex Looking = new Regex(@"\b(look(ing)? at|take a look|have a look|see (this|that|it|what|me|here)|can you see|do you see|what (do|can) you see|what am i wearing|what am i (holding|looking at|doing|watching|playing)|what('s| is) (this|that|on my|in front)|read (this|that|it)|check (this|that) out|how do i look)\b", RegexOptions.IgnoreCase);
 
         private bool Wandering { get { return CapriConfig.Wander != 0; } }
         private Vector2 secondsBetweenWanders { get { return CapriConfig.WanderGaps[Mathf.Clamp(CapriConfig.Wander, 0, 3)]; } }
@@ -695,10 +695,14 @@ namespace CapriRoom
             // Busy with a glance or a pop-in: what you said waits its turn instead of being dropped.
             if (brain.Busy) { waitingLine = said; return; }
             byte[] picture = null;
-            if (CapriConfig.Sight && Looking.IsMatch(said))
+            if (Looking.IsMatch(said))
             {
+                // Asked to look but she can't: she says why herself, instead of her brain guessing without a picture.
+                if (!CapriConfig.Sight) { Say("I can't see yet. Press Y, then YOU, and turn on Let her see."); return; }
+                if (!brain.CanSee) { Say("This brain can't see pictures. Pick NVIDIA, OpenAI or Claude under BRAIN and I'll look."); return; }
                 picture = eyes.Snap(false);
-                if (picture == null && eyes.Problem != null) { Say(eyes.Problem); return; }
+                if (picture == null) { Say(eyes.WhyNot() ?? "Couldn't get a picture that time. Ask me again?"); return; }
+                Debug.Log("[Capri] Looking: sent a " + picture.Length / 1024 + " KB picture");
             }
             brain.Reply(said, false, Talk, line => Say(line), picture);
         }

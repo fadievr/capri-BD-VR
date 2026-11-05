@@ -16,7 +16,9 @@ namespace CapriRoom
         private PassthroughCameraAccess cam;
         private Texture2D read;
         private byte[] lastPrint;
-        private bool asked;
+        private bool asking;
+        private float askedAt = -100;
+        private int denials;
 
         public string Problem { get; private set; }
 
@@ -35,23 +37,45 @@ namespace CapriRoom
             }
         }
 
-        // Turns her eyes on or off to match her settings, asking for the camera the first time.
+        // Turns her eyes on or off to match her settings, asking for the camera if it isn't allowed yet. It asks again each
+        // time (not just once), since the headset can drop a request that comes while another prompt is up.
         public void Want(bool on)
         {
             if (!on) { if (cam != null) cam.gameObject.SetActive(false); return; }
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!Allowed)
             {
-                if (asked) return;
-                asked = true;
+                // A request the headset dropped never calls back, so after a while she's free to ask again.
+                if (asking && Time.realtimeSinceStartup - askedAt < 8) return;
+                asking = true;
+                askedAt = Time.realtimeSinceStartup;
                 var callbacks = new UnityEngine.Android.PermissionCallbacks();
-                callbacks.PermissionGranted += delegate { Problem = null; Open(); };
-                callbacks.PermissionDenied += delegate { Problem = "I can't see without the headset camera. Allow it in Settings > Privacy > App permissions."; };
+                callbacks.PermissionGranted += delegate { asking = false; denials = 0; Problem = null; Open(); };
+                callbacks.PermissionDenied += delegate { asking = false; denials++; Problem = NoCamera; };
+                Debug.Log("[Capri] Asking for the headset camera");
                 UnityEngine.Android.Permission.RequestUserPermission(CameraPermission, callbacks);
                 return;
             }
 #endif
             Open();
+        }
+
+        private const string NoCamera = "I can't see without the headset camera. Open Settings > Privacy & safety > App permissions > Headset cameras and turn on Capri Room.";
+
+        // Why she can't take a picture right now, in her words, asking for the camera again if that's what's missing.
+        public string WhyNot()
+        {
+            if (Ready) return null;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Allowed)
+            {
+                if (denials >= 2) return NoCamera;
+                Want(true);
+                return "I need the headset camera to see. Allow it in the box that just popped up, then ask me again.";
+            }
+#endif
+            Open();
+            return "My eyes are still waking up. Ask me again in a sec.";
         }
 
         private void Open()

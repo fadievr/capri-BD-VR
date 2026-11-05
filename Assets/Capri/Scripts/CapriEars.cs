@@ -61,7 +61,7 @@ namespace CapriRoom
                 }
             }
         }
-        private static string Service { get { return CapriConfig.Hearings[Mathf.Clamp(CapriConfig.Hearing, 0, 2)].Replace(" (free)", ""); } }
+        private static string Service { get { string name = CapriConfig.Hearings[Mathf.Clamp(CapriConfig.Hearing, 0, 2)]; int cut = name.IndexOf(" ("); return cut > 0 ? name.Substring(0, cut) : name; } }
 
         private void Update()
         {
@@ -213,10 +213,18 @@ namespace CapriRoom
                         yield return Send(samples, "transcribe-1", false);
                         yield break;
                     }
+                    // Fish's hearing is never free. With a Groq key set, she switches to Groq and hears this one again.
+                    if (fish && status == 402 && !string.IsNullOrEmpty(CapriConfig.GroqKey))
+                    {
+                        CapriConfig.Hearing = 0;
+                        if (Trouble != null) Trouble("Fish Audio's hearing costs credit, so I switched Hearing to Groq (free). Your Fish voice still works.");
+                        yield return Send(samples, fishModel, false);
+                        yield break;
+                    }
                     string why = Why(said);
                     if (Trouble != null) Trouble(
                         status == 401 || status == 403 ? Service + " won't take that key, so I can't hear you. Press Y and check Hearing under VOICE."
-                        : status == 402 && CapriConfig.Hearing == 1 ? "Fish Audio's hearing has no free tier: it needs prepaid API credit, which a fish.audio plan doesn't include (HTTP 402). Press Y and set Hearing to Groq (free) under VOICE."
+                        : status == 402 && CapriConfig.Hearing == 1 ? "Fish Audio's hearing has no free tier. The Free model only covers my voice (HTTP 402). Press Y, then VOICE, set Hearing to Groq (free) and add a free Groq key from console.groq.com."
                         : status == 402 ? Service + " needs credit to hear you (HTTP 402). Press Y and set Hearing to Groq (free) under VOICE."
                         : status == 429 ? "Too much talking for " + Service + "'s free limit. Give me a minute, choom."
                         : status == 0 ? "No signal: " + (web.error ?? "couldn't reach " + Service + ".")

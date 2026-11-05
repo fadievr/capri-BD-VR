@@ -28,17 +28,30 @@ namespace CapriRoom.EditorTools
                     if (line.Contains("permission") || line.Contains("granted=")) sb.AppendLine(line.TrimEnd());
                 sb.AppendLine("== running ==\n" + Adb(adb, $"shell pidof {Package}"));
                 sb.AppendLine("== log ==");
-                foreach (var line in Adb(adb, "logcat -d -t 4000").Split('\n'))
+                foreach (var line in Adb(adb, "logcat -d").Split('\n'))
                 {
                     var l = line.ToLowerInvariant();
                     if (l.Contains("[capri]") || l.Contains("mruk") || l.Contains("scene") || l.Contains("spatial")
-                        || l.Contains("use_scene") || l.Contains("capriroom") || l.Contains("exception"))
+                        || l.Contains("use_scene") || l.Contains("capriroom") || l.Contains("exception")
+                        || l.Contains("passthroughcamera") || l.Contains("headset_camera"))
                         sb.AppendLine(line.TrimEnd());
                 }
             }
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, sb.ToString());
             Debug.Log("[Capri] Headset report written to " + path);
+        }
+
+        // Capri → Debug → Allow camera on headset: grants Capri Room the headset camera over USB, for when the in-app
+        // prompt doesn't show. Same as turning it on in the headset's Settings > Privacy & safety > App permissions.
+        [MenuItem("Capri/Debug/Allow camera on headset")]
+        public static void AllowCamera()
+        {
+            string adb = FindAdb();
+            if (adb == null) { Debug.LogError("[Capri] adb not found"); return; }
+            string said = Adb(adb, $"shell pm grant {Package} horizonos.permission.HEADSET_CAMERA");
+            bool on = Adb(adb, $"shell dumpsys package {Package}").Contains("HEADSET_CAMERA: granted=true");
+            Debug.Log("[Capri] Headset camera " + (on ? "allowed for Capri Room. Restart the app on the headset." : "not allowed: " + said));
         }
 
         private static string Adb(string adb, string args)

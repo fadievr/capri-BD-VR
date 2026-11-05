@@ -122,6 +122,7 @@ namespace CapriRoom
                     Choice(ref row, "Hearing", CapriConfig.Hearings, CapriConfig.Hearing, v => CapriConfig.Hearing = v);
                     if (CapriConfig.Hearing == 0) Field(ref row, "Groq key (free)", CapriConfig.Masked(CapriConfig.GroqKey), true, v => CapriConfig.GroqKey = v);
                     else if (CapriConfig.Hearing == 2 && CapriConfig.Brain != 2) Do(ref row, "OpenAI hearing", "Needs OpenAI brain", delegate { });
+                    else if (CapriConfig.Hearing == 1) Do(ref row, "Fish hearing costs credit", "Free = voice only", delegate { });
                     Choice(ref row, "Volume", CapriConfig.VolumeNames, CapriConfig.Volume, v => CapriConfig.Volume = v);
                     Choice(ref row, "Pitch", CapriConfig.PitchNames, CapriConfig.Pitch, v => CapriConfig.Pitch = v);
                     Choice(ref row, "Speed", CapriConfig.SpeedNames, CapriConfig.Speed, v => CapriConfig.Speed = v);

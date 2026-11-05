@@ -34,7 +34,7 @@ namespace CapriRoom
         public static int FishModelIndex { get { return Mathf.Max(0, System.Array.IndexOf(FishModels, Text("fishmodel"))); } set { Text("fishmodel", FishModels[Mathf.Clamp(value, 0, FishModels.Length - 1)]); } }
         public static string FishModel { get { return FishModels[FishModelIndex]; } }
         // Who turns what you say into text. Groq's Whisper has a free tier; Fish Audio needs credit for this.
-        public static readonly string[] Hearings = { "Groq (free)", "Fish Audio", "OpenAI" };
+        public static readonly string[] Hearings = { "Groq (free)", "Fish Audio (paid)", "OpenAI (paid)" };
         public static int Hearing { get { return Get("hearing", 0); } set { Set("hearing", value); } }
         public static string GroqKey { get { return Text("groqkey"); } set { Text("groqkey", value); } }
 

@@ -13,6 +13,10 @@
   - Fish's hearing (speech to text) has no free tier, so it always answered 402 without prepaid API credit. A fish.audio plan doesn't include API credit. She now says so and points you to Groq (free). She no longer retries Fish a second time, which cost another 402.
   - Her voice is free only with Fish's s2.1-pro-free model. Any other model name, even a typo or a stray space, made Fish quietly use its paid model and answer 402. Fish model is now a choice (Free, or the paid ones), and anything unknown falls back to Free.
   - Clearer messages when Fish says no (402, 429 and others), with Fish's own reason.
+- "Let her see": the headset camera prompt could get lost, so she never got the camera and her brain answered "I can't see" without a picture. She now asks again whenever you ask her to look. When she can't look, she tells you why herself: Let her see is off, the brain can't take pictures, the camera isn't allowed yet, or her eyes are still starting.
+- She notices more ways of asking her to look: "can you see me?", "do you see this?", "what am I wearing?".
+- Hearing: Fish Audio's hearing has no free tier. The Free model only covers her voice. The Hearing choices now read Groq (free), Fish Audio (paid) and OpenAI (paid). If Fish turns hearing down for credit (HTTP 402) and you've added a Groq key, she switches Hearing to Groq and hears you again.
+- Capri → Debug → Allow camera on headset grants the camera over USB. The Headset report now includes the passthrough camera log.
 
 ## v1.0.3 (2026-11-04)
 
