@@ -70,14 +70,25 @@ namespace CapriRoom
                 {
                     long code = web.responseCode;
                     Debug.Log("[Capri] Fish Audio failed: HTTP " + code + " " + web.error + " " + (web.downloadHandler != null ? web.downloadHandler.text : ""));
+                    // 402: Fish's paid models want prepaid API credit, which a fish.audio web plan doesn't include. Only
+                    // s2.1-pro-free is free. 429: too many lines too fast.
+                    bool free = CapriConfig.FishModel == CapriConfig.FishModels[0];
                     failed(code == 401 || code == 403 ? "Fish Audio won't take that key. Press Y and check it under VOICE."
                         : code == 404 ? "Fish Audio can't find that voice. Press Y and check the voice ID under VOICE."
-                        : code == 402 ? "Fish Audio says your account's out of credit."
-                        : "My voice glitched out. Fish Audio didn't answer.");
+                        : code == 402 && !free ? "Fish Audio wants API credit for " + CapriConfig.FishModel + " (HTTP 402). Press Y and set Fish model to Free under VOICE."
+                        : code == 402 ? "Fish Audio turned down even its free voice (HTTP 402): " + Short(web.downloadHandler != null ? web.downloadHandler.text : "")
+                        : code == 429 ? "Fish Audio says I'm talking too fast (HTTP 429). Give me a sec."
+                        : "My voice glitched out. Fish Audio didn't answer (HTTP " + code + ").");
                     yield break;
                 }
                 done(clip);
             }
+        }
+
+        private static string Short(string text)
+        {
+            text = (text ?? "").Replace("\n", " ").Trim();
+            return text.Length == 0 ? "no reason given." : text.Length > 120 ? text.Substring(0, 117) + "..." : text;
         }
 
         // Turns a 16-bit PCM WAV file into an AudioClip.

@@ -22,7 +22,7 @@ Press **Y** to open her settings, then point with the laser and pull the trigger
 | Tab | What to set |
 |---|---|
 | **BRAIN** | Pick an AI (NVIDIA free key, OpenAI, Claude or DeepSeek) and paste its key. |
-| **VOICE** | **Hearing:** Groq (free key from [console.groq.com](https://console.groq.com)). **Voice:** Fish Audio with your key and a voice from [fish.audio](https://fish.audio). |
+| **VOICE** | **Hearing:** Groq (free key from [console.groq.com](https://console.groq.com)). Fish Audio's hearing needs paid API credit. **Voice:** Fish Audio with your key, a voice from [fish.audio](https://fish.audio), and Fish model **Free** (the others need API credit, which a fish.audio plan doesn't include). |
 
 Keys stay on your headset and only go to the service they belong to. Paste them with her keyboard's **Paste** button after copying them in the Quest browser.
 
@@ -40,6 +40,7 @@ Capri prohibits cloning or impersonating a living person's voice without explici
 | **A** | She bops along while sitting on a ledge. |
 | **B** | Come here. |
 | **Y** | Settings: BRAIN, VOICE, YOU, MOVES. |
+| Say **"what do you see?"** | With **Let her see** on (Y → YOU), she looks through your Quest's camera. **Watch me** has her glance now and then and comment. Off until you turn it on. |
 
 ## Build it yourself
 

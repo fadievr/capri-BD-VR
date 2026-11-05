@@ -26,11 +26,25 @@ namespace CapriRoom
         public static int VoiceService { get { return Get("voice", 0); } set { Set("voice", value); } }
         public static string FishKey { get { return Text("fishkey"); } set { Text("fishkey", value); } }
         public static string FishVoice { get { return Text("fishvoice"); } set { Text("fishvoice", value); } }
-        public static string FishModel { get { string m = Text("fishmodel"); return string.IsNullOrEmpty(m) ? "s2.1-pro-free" : m; } set { Text("fishmodel", value); } }
+        // Fish's text-to-speech models. Only s2.1-pro-free is free; the rest need prepaid API credit (separate from a fish.audio
+        // web plan). Fish quietly uses its paid s2.1-pro for any model name it doesn't know, so a typo used to cost credit
+        // and answer 402. Now it's a choice, and anything else stored falls back to the free one.
+        public static readonly string[] FishModels = { "s2.1-pro-free", "s2.1-pro", "s2-pro", "s1" };
+        public static readonly string[] FishModelNames = { "Free", "S2.1 Pro (credit)", "S2 Pro (credit)", "S1 (credit)" };
+        public static int FishModelIndex { get { return Mathf.Max(0, System.Array.IndexOf(FishModels, Text("fishmodel"))); } set { Text("fishmodel", FishModels[Mathf.Clamp(value, 0, FishModels.Length - 1)]); } }
+        public static string FishModel { get { return FishModels[FishModelIndex]; } }
         // Who turns what you say into text. Groq's Whisper has a free tier; Fish Audio needs credit for this.
         public static readonly string[] Hearings = { "Groq (free)", "Fish Audio", "OpenAI" };
         public static int Hearing { get { return Get("hearing", 0); } set { Set("hearing", value); } }
         public static string GroqKey { get { return Text("groqkey"); } set { Text("groqkey", value); } }
+
+        // ---- SIGHT ----
+        // Let her see: she can look through your Quest's camera when you ask her to, and glance now and then with Watch me,
+        // like the desktop app's Watch my screen. Off until you turn it on.
+        public static bool Sight { get { return Get("sight", 0) == 1; } set { Set("sight", value ? 1 : 0); } }
+        public static readonly string[] WatchNames = { "Off", "Every 30 s", "Every minute", "Every 2 min", "Every 5 min" };
+        public static readonly int[] WatchSeconds = { 0, 30, 60, 120, 300 };
+        public static int Watch { get { return Get("watch", 0); } set { Set("watch", value); } }
         public static readonly string[] VolumeNames = { "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%", "120%", "150%" };
         public static readonly float[] VolumeValues = { 0, .1f, .2f, .3f, .4f, .5f, .6f, .7f, .8f, .9f, 1, 1.2f, 1.5f };
         public static int Volume { get { return Get("volume", 10); } set { Set("volume", value); } }

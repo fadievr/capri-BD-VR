@@ -77,11 +77,33 @@ namespace CapriRoom
             try { if (File.Exists(savePath)) File.Delete(savePath); } catch (Exception) { }
         }
 
-        // Asks her to answer what you said. "nudge" is true for a pop-in, when she speaks up on her own.
-        public void Reply(string said, bool nudge, Action<string> done, Action<string> failed)
+        // Asks her to answer what you said. "nudge" is true for a pop-in, when she speaks up on her own. "picture" is a JPEG
+        // from your Quest's camera when she's looking at something you asked her to look at.
+        public void Reply(string said, bool nudge, Action<string> done, Action<string> failed, byte[] picture = null)
         {
             if (Busy) return;
-            StartCoroutine(Ask(said, nudge, done, failed));
+            if (picture != null && !CanSee) picture = null;
+            StartCoroutine(Ask(said, nudge, done, failed, picture));
+        }
+
+        // Every brain but DeepSeek's takes pictures: NVIDIA's default model is a vision one, and GPT and Claude see too.
+        public bool CanSee { get { return CapriConfig.Brain >= 1 && CapriConfig.Brain <= 3; } }
+
+        // A glance through your Quest's camera, like the desktop app's Watch my screen: a fresh look with no chat history,
+        // answered in a few words. Its line, if she says one, is kept in her memory afterwards with Glanced().
+        public void Look(byte[] picture, string ask, Action<string> done, Action<string> failed)
+        {
+            if (Busy || picture == null || !CanSee) { failed(null); return; }
+            Busy = true;
+            StartCoroutine(Send(Prompt(), new List<Line>(), ask, picture, 160, done, failed));
+        }
+
+        // What she saw on a glance goes in her memory, so "what did you see?" gets the truth.
+        public void Glanced(string saw, string said)
+        {
+            history.Add(new Line { role = "user", content = "(You glanced through their headset" + (string.IsNullOrEmpty(saw) ? "" : " and saw: " + saw) + ")" });
+            history.Add(new Line { role = "assistant", content = string.IsNullOrEmpty(said) ? "(stayed quiet)" : said });
+            Save();
         }
 
         private string Prompt()
@@ -95,18 +117,30 @@ namespace CapriRoom
             return Personality + "\n" + Safety + about;
         }
 
-        private IEnumerator Ask(string said, bool nudge, Action<string> done, Action<string> failed)
+        private IEnumerator Ask(string said, bool nudge, Action<string> done, Action<string> failed, byte[] picture)
+        {
+            Busy = true;
+            string userLine = nudge ? "(They've been quiet a while. Say something to them on your own: a quick check-in, a tease or a question. Don't mention being prompted.)" : said;
+            if (picture != null) userLine += "\n(This is what's in front of them right now, through the cameras on their Quest. You're not in the picture. Only say what you can clearly see; if it's dark or blurry, say so.)";
+            List<Line> asking = new List<Line>();
+            int keep = MemoryMessages[Mathf.Clamp(CapriConfig.Memory, 0, 2)];
+            for (int i = Mathf.Max(0, history.Count - keep); i < history.Count; i++) asking.Add(history[i]);
+            yield return Send(Prompt(), asking, userLine, picture, 600, delegate (string answer)
+            {
+                if (!nudge) history.Add(new Line { role = "user", content = picture != null ? said + " (you looked through their headset)" : said });
+                else history.Add(new Line { role = "user", content = "(quiet for a while)" });
+                history.Add(new Line { role = "assistant", content = answer });
+                Save();
+                done(answer);
+            }, failed);
+        }
+
+        // One request to her brain: the system prompt, some chat, and the newest line, with a picture if there is one.
+        private IEnumerator Send(string system, List<Line> asking, string userLine, byte[] picture, int maxTokens, Action<string> done, Action<string> failed)
         {
             Busy = true;
             int brain = CapriConfig.Brain;
             string key = CapriConfig.BrainKey, model = CapriConfig.BrainModel;
-            string userLine = nudge ? "(They've been quiet a while. Say something to them on your own: a quick check-in, a tease or a question. Don't mention being prompted.)" : said;
-
-            List<Line> asking = new List<Line>();
-            int keep = MemoryMessages[Mathf.Clamp(CapriConfig.Memory, 0, 2)];
-            for (int i = Mathf.Max(0, history.Count - keep); i < history.Count; i++) asking.Add(history[i]);
-            asking.Add(new Line { role = "user", content = userLine });
-
             bool claude = brain == 3;
             string url = brain == 1 ? "https://integrate.api.nvidia.com/v1/chat/completions"
                 : brain == 2 ? "https://api.openai.com/v1/chat/completions"
@@ -114,14 +148,25 @@ namespace CapriRoom
                 : "https://api.deepseek.com/chat/completions";
 
             StringBuilder body = new StringBuilder("{\"model\":").Append(Quote(model));
-            if (claude) body.Append(",\"max_tokens\":600,\"system\":").Append(Quote(Prompt())).Append(",\"messages\":[");
-            else body.Append(",\"messages\":[{\"role\":\"system\",\"content\":").Append(Quote(Prompt())).Append('}');
-            for (int i = 0; i < asking.Count; i++)
+            if (claude) body.Append(",\"max_tokens\":").Append(maxTokens).Append(",\"system\":").Append(Quote(system)).Append(",\"messages\":[");
+            else body.Append(",\"messages\":[{\"role\":\"system\",\"content\":").Append(Quote(system)).Append('}');
+            bool first = true;
+            foreach (Line line in asking)
             {
-                if (i > 0 || !claude) body.Append(',');
-                body.Append("{\"role\":").Append(Quote(asking[i].role)).Append(",\"content\":").Append(Quote(asking[i].content)).Append('}');
+                if (!first || !claude) body.Append(',');
+                first = false;
+                body.Append("{\"role\":").Append(Quote(line.role)).Append(",\"content\":").Append(Quote(line.content)).Append('}');
             }
-            body.Append("]}");
+            if (!first || !claude) body.Append(',');
+            body.Append("{\"role\":\"user\",\"content\":");
+            if (picture == null) body.Append(Quote(userLine));
+            else
+            {
+                string data = Convert.ToBase64String(picture);
+                if (claude) body.Append("[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/jpeg\",\"data\":\"").Append(data).Append("\"}},{\"type\":\"text\",\"text\":").Append(Quote(userLine)).Append("}]");
+                else body.Append("[{\"type\":\"text\",\"text\":").Append(Quote(userLine)).Append("},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,").Append(data).Append("\"}}]");
+            }
+            body.Append("}]}");
 
             using (UnityWebRequest web = new UnityWebRequest(url, "POST"))
             {
@@ -162,14 +207,11 @@ namespace CapriRoom
                     failed(code == 401 || code == 403 ? "My brain won't take that key. Press Y and check it under BRAIN."
                         : code == 404 ? "That model isn't on your key. Press Y and pick another under BRAIN."
                         : code == 429 ? "Too many requests. Give me a minute, choom."
+                        : code == 400 && picture != null ? "My brain model can't take pictures. Press Y and pick one that can see under BRAIN."
                         : web.result == UnityWebRequest.Result.ConnectionError ? "No signal. Is your headset online?"
                         : "[SIGNAL CORRUPTED] " + (problem ?? "Lost that one in the static."));
                     yield break;
                 }
-                if (!nudge) history.Add(new Line { role = "user", content = said });
-                else history.Add(new Line { role = "user", content = "(quiet for a while)" });
-                history.Add(new Line { role = "assistant", content = answer });
-                Save();
                 done(answer);
             }
         }

@@ -1,5 +1,19 @@
 # Capri Room patch notes
 
+## v1.0.4 (2026-11-05)
+
+**Added**
+- Let her see (Y → YOU): Capri can look through your Quest 3's camera. Ask "what do you see?", "look at this" or "what am I holding?" and she answers about what's in front of you. It's off until you turn it on, and the headset asks you to allow its camera. She sees your real room, not herself.
+- Watch me (Y → YOU, under Let her see): every 30 seconds to 5 minutes she glances at what you're doing and says one short thing about it, like the desktop app's Watch my screen. She only looks when the view has changed and you aren't talking to her. She keeps quiet when she isn't sure or has nothing new to say, and she remembers what she saw if you ask.
+- Seeing needs a brain that takes pictures: NVIDIA (the default), OpenAI or Claude. DeepSeek can't.
+- What you say while she's busy with a glance waits its turn instead of getting lost.
+
+**Fixed**
+- Fish Audio "out of credit" (HTTP 402):
+  - Fish's hearing (speech to text) has no free tier, so it always answered 402 without prepaid API credit. A fish.audio plan doesn't include API credit. She now says so and points you to Groq (free). She no longer retries Fish a second time, which cost another 402.
+  - Her voice is free only with Fish's s2.1-pro-free model. Any other model name, even a typo or a stray space, made Fish quietly use its paid model and answer 402. Fish model is now a choice (Free, or the paid ones), and anything unknown falls back to Free.
+  - Clearer messages when Fish says no (402, 429 and others), with Fish's own reason.
+
 ## v1.0.3 (2026-11-04)
 
 **Added**

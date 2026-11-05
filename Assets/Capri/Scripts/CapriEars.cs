@@ -208,7 +208,7 @@ namespace CapriRoom
                     long status = web.responseCode;
                     string said = web.downloadHandler != null ? web.downloadHandler.text : "";
                     Debug.Log("[Capri] Speech to text failed: HTTP " + status + " " + web.error + " " + said);
-                    if (fish && mayRetry && status >= 400 && status != 401 && status != 403 && status != 429)
+                    if (fish && mayRetry && status >= 400 && status != 401 && status != 402 && status != 403 && status != 429)
                     {
                         yield return Send(samples, "transcribe-1", false);
                         yield break;
@@ -216,6 +216,7 @@ namespace CapriRoom
                     string why = Why(said);
                     if (Trouble != null) Trouble(
                         status == 401 || status == 403 ? Service + " won't take that key, so I can't hear you. Press Y and check Hearing under VOICE."
+                        : status == 402 && CapriConfig.Hearing == 1 ? "Fish Audio's hearing has no free tier: it needs prepaid API credit, which a fish.audio plan doesn't include (HTTP 402). Press Y and set Hearing to Groq (free) under VOICE."
                         : status == 402 ? Service + " needs credit to hear you (HTTP 402). Press Y and set Hearing to Groq (free) under VOICE."
                         : status == 429 ? "Too much talking for " + Service + "'s free limit. Give me a minute, choom."
                         : status == 0 ? "No signal: " + (web.error ?? "couldn't reach " + Service + ".")

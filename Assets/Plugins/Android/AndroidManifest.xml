@@ -15,5 +15,7 @@
     <meta-data android:name="com.oculus.supportedDevices" android:value="quest|quest2|questpro|quest3|quest3s|stanley" tools:replace="android:value" />
   </application>
   <uses-feature android:name="android.hardware.vr.headtracking" android:version="1" android:required="true" />
+  <!-- Let her see: the Quest 3's passthrough camera, asked for only when "Let her see" is turned on. -->
+  <uses-permission android:name="horizonos.permission.HEADSET_CAMERA" />
   <horizonos:uses-horizonos-sdk horizonos:minSdkVersion="60" horizonos:targetSdkVersion="207" />
 </manifest>

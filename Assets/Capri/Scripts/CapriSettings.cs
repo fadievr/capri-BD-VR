@@ -118,7 +118,7 @@ namespace CapriRoom
                     Choice(ref row, "Voice", CapriConfig.Voices, CapriConfig.VoiceService, v => CapriConfig.VoiceService = v);
                     Field(ref row, "Fish Audio key", CapriConfig.Masked(CapriConfig.FishKey), true, v => CapriConfig.FishKey = v);
                     Field(ref row, "Voice ID or link", string.IsNullOrEmpty(CapriConfig.FishVoice) ? "(pick one: required)" : CapriConfig.FishVoiceId, false, v => CapriConfig.FishVoice = v);
-                    Field(ref row, "Fish model", CapriConfig.FishModel, false, v => CapriConfig.FishModel = v);
+                    Choice(ref row, "Fish model", CapriConfig.FishModelNames, CapriConfig.FishModelIndex, v => CapriConfig.FishModelIndex = v);
                     Choice(ref row, "Hearing", CapriConfig.Hearings, CapriConfig.Hearing, v => CapriConfig.Hearing = v);
                     if (CapriConfig.Hearing == 0) Field(ref row, "Groq key (free)", CapriConfig.Masked(CapriConfig.GroqKey), true, v => CapriConfig.GroqKey = v);
                     else if (CapriConfig.Hearing == 2 && CapriConfig.Brain != 2) Do(ref row, "OpenAI hearing", "Needs OpenAI brain", delegate { });
@@ -133,6 +133,8 @@ namespace CapriRoom
                     Toggle(ref row, "Microphone (X mutes)", !CapriConfig.MicMuted, v => CapriConfig.MicMuted = !v);
                     Choice(ref row, "Language", CapriConfig.LanguageNames, CapriConfig.Language, v => CapriConfig.Language = v);
                     Field(ref row, "What should she call you?", string.IsNullOrEmpty(CapriConfig.CallMe) ? "(not set)" : CapriConfig.CallMe, false, v => CapriConfig.CallMe = v);
+                    Toggle(ref row, "Let her see (Quest camera)", CapriConfig.Sight, v => CapriConfig.Sight = v);
+                    if (CapriConfig.Sight) Choice(ref row, "Watch me", CapriConfig.WatchNames, CapriConfig.Watch, v => CapriConfig.Watch = v);
                     break;
                 case 3:
                     Choice(ref row, "Wander", CapriConfig.WanderNames, CapriConfig.Wander, v => CapriConfig.Wander = v);

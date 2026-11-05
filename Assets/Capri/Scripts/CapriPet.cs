@@ -13,6 +13,9 @@
 //   Bop:         A, while she's sitting on a ledge.
 //   Come here:   B.
 //   Settings:    Y opens her settings: BRAIN, VOICE, YOU and MOVES.
+//   Let her see: Y → YOU. She can look through your Quest's camera when you ask ("what do you see?", "look at this"),
+//                and with Watch me she glances now and then and says something about it, like the desktop app's
+//                Watch my screen.
 //   Put her down next to the edge of a table, couch or bed and she sits on it.
 using System;
 using System.Collections.Generic;
@@ -112,6 +115,16 @@ namespace CapriRoom
         private bool sulkLine, dodgedOnce;
         private bool Sulking { get { return sulkSince >= 0; } }
 
+        // Her eyes (Let her see) and her glances (Watch me): when the next glance is due, whether one's in flight, and her
+        // glance lines from the last hour so she doesn't repeat herself.
+        private CapriEyes eyes;
+        private bool eyesStarted, sawBefore, glancing;
+        private float nextGlance = -1, lastGlance = -1;
+        private readonly List<KeyValuePair<float, string>> glanced = new List<KeyValuePair<float, string>>();
+        // Asking her to look at something sends her a picture with what you said.
+        private string waitingLine;
+        private static readonly Regex Looking = new Regex(@"\b(look(ing)? at|take a look|have a look|see (this|that|it|what)|can you see|what do you see|what am i (holding|looking at|doing|watching|playing)|what('s| is) (this|that|on my|in front)|read (this|that|it)|check (this|that) out|how do i look)\b", RegexOptions.IgnoreCase);
+
         private bool Wandering { get { return CapriConfig.Wander != 0; } }
         private Vector2 secondsBetweenWanders { get { return CapriConfig.WanderGaps[Mathf.Clamp(CapriConfig.Wander, 0, 3)]; } }
         private float napAfterSeconds { get { float s = CapriConfig.SleepSeconds[Mathf.Clamp(CapriConfig.Sleep, 0, 4)]; return s <= 0 ? float.MaxValue : s; } }
@@ -127,6 +140,8 @@ namespace CapriRoom
             ears = gameObject.AddComponent<CapriEars>();
             ears.Paused = delegate { return voice.isPlaying || brain.Busy || speaker.Busy || mode == Mode.Waiting; };
             ears.Said = Heard;
+            eyes = gameObject.AddComponent<CapriEyes>();
+            sawBefore = CapriConfig.Sight;
             ears.Trouble = line => Say(line);
             nextPop = Time.time + Gap(CapriConfig.PopGaps[Mathf.Clamp(CapriConfig.PopIns, 0, 2)]);
 
@@ -166,6 +181,8 @@ namespace CapriRoom
                 GlitchIn(new Surface { Point = room.FloorSpot(front, 0.4f) });
                 return;
             }
+            // Her eyes start after the room has loaded, so the camera's permission prompt doesn't clash with the room's.
+            if (!eyesStarted) { eyesStarted = true; eyes.Want(CapriConfig.Sight); }
 
             Animate();
             if (Sulking && Time.time - sulkBothered > SulkAlone) MakeUp(AloneLines);
@@ -173,6 +190,8 @@ namespace CapriRoom
             if (settings.IsOpen) settings.Point(hands.Both);
             Listen();
             PopIn();
+            Glance();
+            if (waitingLine != null && !brain.Busy) { string said = waitingLine; waitingLine = null; Heard(said); }
 
             switch (mode)
             {
@@ -628,6 +647,11 @@ namespace CapriRoom
             speaker.Apply();
             nextWander = Mathf.Min(nextWander, Time.time + Gap(secondsBetweenWanders));
             nextPop = Time.time + Gap(CapriConfig.PopGaps[Mathf.Clamp(CapriConfig.PopIns, 0, 2)]);
+            if (eyesStarted) eyes.Want(CapriConfig.Sight);
+            nextGlance = -1;
+            if (CapriConfig.Sight && !sawBefore)
+                Say(!brain.Ready ? "Set up my brain under BRAIN, then I can look around." : !brain.CanSee ? "DeepSeek can't see pictures. Pick NVIDIA, OpenAI or Claude under BRAIN and I'll look." : "Eyes on. Ask me what I see, or turn on Watch me and I'll check in now and then.");
+            sawBefore = CapriConfig.Sight;
         }
 
         public void ForgetChats()
@@ -668,7 +692,51 @@ namespace CapriRoom
             if (!brain.Ready) { Say("My brain's offline. Press Y and set one up under BRAIN."); return; }
             if (mode == Mode.Napping) { mode = Mode.Waking; Play("wake", false, Rest); }
             bubble.Say("...", 20);
-            brain.Reply(said, false, Talk, line => Say(line));
+            // Busy with a glance or a pop-in: what you said waits its turn instead of being dropped.
+            if (brain.Busy) { waitingLine = said; return; }
+            byte[] picture = null;
+            if (CapriConfig.Sight && Looking.IsMatch(said))
+            {
+                picture = eyes.Snap(false);
+                if (picture == null && eyes.Problem != null) { Say(eyes.Problem); return; }
+            }
+            brain.Reply(said, false, Talk, line => Say(line), picture);
+        }
+
+        // Watch me: now and then she glances through your Quest's camera and says one short thing about what's in front of
+        // you, like the desktop app's Watch my screen. Only when the view changed, she isn't busy, and you aren't talking
+        // or holding her. A look she isn't sure of, or one that repeats an earlier line, stays unsaid.
+        private void Glance()
+        {
+            int gap = CapriConfig.WatchSeconds[Mathf.Clamp(CapriConfig.Watch, 0, CapriConfig.WatchSeconds.Length - 1)];
+            if (gap <= 0 || !CapriConfig.Sight || glancing) return;
+            if (nextGlance < 0) nextGlance = Time.time + Mathf.Min(20, gap);
+            if (Time.time < nextGlance) return;
+            if (!eyes.Ready || !brain.Ready || !brain.CanSee || brain.Busy || speaker.Busy || voice.isPlaying || ears.Hearing || settings.IsOpen) return;
+            if (mode == Mode.Held || mode == Mode.Falling || mode == Mode.Napping || mode == Mode.GlitchingIn || mode == Mode.GlitchingOut || mode == Mode.Waiting) return;
+            nextGlance = Time.time + gap * UnityEngine.Random.Range(0.8f, 1.2f);
+            byte[] shot = eyes.Snap(lastGlance >= 0 && Time.time - lastGlance < 300);
+            if (shot == null) return;
+            glancing = true;
+            lastGlance = Time.time;
+            glanced.RemoveAll(said => Time.time - said.Key > CapriGlances.Memory);
+            List<string> recent = new List<string>();
+            foreach (KeyValuePair<float, string> said in glanced) recent.Add(said.Value);
+            brain.Look(shot, CapriGlances.Ask(recent), delegate (string raw)
+            {
+                glancing = false;
+                string saw;
+                string line = CapriGlances.Watched(raw, out saw);
+                if (line.Length > 0 && CapriGlances.Repeats(line, recent)) line = "";
+                if (saw != null) brain.Glanced(saw, line);
+                if (line.Length == 0) return;
+                glanced.Add(new KeyValuePair<float, string>(Time.time, line));
+                Talk(line);
+            }, delegate (string problem)
+            {
+                glancing = false;
+                if (problem != null) Debug.Log("[Capri] Glance failed: " + problem);
+            });
         }
 
         // She speaks up on her own now and then (Pop-ins).
