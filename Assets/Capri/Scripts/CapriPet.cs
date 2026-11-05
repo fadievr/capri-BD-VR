@@ -286,7 +286,7 @@ namespace CapriRoom
         private void ComeHere()
         {
             Vector3 front = hands.Head.position + RoomSense.Flat(hands.Head.forward).normalized * 0.9f;
-            Say("Coming, choom.");
+            Voice("Coming, choom.");
             GlitchTo(new Surface { Point = room.FloorSpot(front, 0.3f) });
         }
 
@@ -350,7 +350,7 @@ namespace CapriRoom
             if (Time.time - lastAttention < 1)
             {
                 mode = Mode.Waking;
-                Play("wake", false, delegate { Rest(); Say(Pick(WakeLines)); });
+                Play("wake", false, delegate { Rest(); Voice(Pick(WakeLines)); });
             }
         }
 
@@ -411,7 +411,7 @@ namespace CapriRoom
         private void React(string standingClip, string perchedClip, string line)
         {
             reactCooldown = Time.time + 4f;
-            Say(line);
+            Voice(line);
             bool perched = standingOn != null && standingOn.Edge;
             if (perched) { Play(perchedClip, false, delegate { if (mode == Mode.Perched) Play("perch", true); }); return; }
             mode = Mode.Reacting;
@@ -436,7 +436,7 @@ namespace CapriRoom
             thrown = false;
             spin = spinRate = 0;
             Play("dangle", true);
-            if (!caught) Say(Pick(HoldLines));
+            if (!caught) Voice(Pick(HoldLines));
         }
 
         private void Held()
@@ -525,11 +525,11 @@ namespace CapriRoom
                 if (ground > room.FloorY + 0.15f)
                 {
                     Surface ledge = room.LedgeNear(next, 0.6f);   // landed on furniture: sit on its nearest edge
-                    if (ledge != null) { if (flew && !flightLine) Say(Pick(TossLines)); SitOn(ledge); return; }
+                    if (ledge != null) { if (flew && !flightLine) Voice(Pick(TossLines)); SitOn(ledge); return; }
                 }
                 standingOn = ground > room.FloorY + 0.15f ? new Surface { Point = next, Raised = true } : null;
                 mode = Mode.Reacting;
-                if (flew && !flightLine) Say(Pick(TossLines));
+                if (flew && !flightLine) Voice(Pick(TossLines));
                 Play("glitch", false, Rest);
                 return;
             }
@@ -557,8 +557,8 @@ namespace CapriRoom
             if (!wasThrown) return;
             bool dizzy = flyHardest >= DizzyFrom;
             if (dizzy) { dizzyFrom = Time.time; dizzyUntil = Time.time + DizzyFor; }
-            if (sulkLine) { sulkLine = false; Say(Pick(SulkLines)); flightLine = true; }
-            else if (dizzy && throwsAt.Count == 1) { Say(Pick(DizzyLines)); flightLine = true; }
+            if (sulkLine) { sulkLine = false; Voice(Pick(SulkLines)); flightLine = true; }
+            else if (dizzy && throwsAt.Count == 1) { Voice(Pick(DizzyLines)); flightLine = true; }
         }
 
         // Every throw counts toward her grudge: the second in two minutes gets a warning and the third starts her sulk. A hard
@@ -570,15 +570,15 @@ namespace CapriRoom
             throwsAt.Add(now);
             if (throwsAt.Count >= SulkThrows) { throwsAt.Clear(); sulkSince = now; sulkBothered = now; dodgedOnce = false; sulkLine = true; return; }
             string line = throwsAt.Count == 2 ? Pick(WarnLines) : fast >= ThrowHard ? Pick(ThrowLines) : null;
-            if (line != null) { Say(line); flightLine = true; }
+            if (line != null) { Voice(line); flightLine = true; }
         }
 
         // Sulking, she won't be picked up: a grab makes her glitch a short hop away from your hand.
         private void Dodge(HandState hand)
         {
             sulkBothered = Time.time;
-            if (!dodgedOnce) { dodgedOnce = true; dodgeSaidAt = Time.time; Say(FirstDodgeLine); }
-            else if (Time.time - dodgeSaidAt > DodgeSaid) { dodgeSaidAt = Time.time; Say(Pick(DodgeLines)); }
+            if (!dodgedOnce) { dodgedOnce = true; dodgeSaidAt = Time.time; Voice(FirstDodgeLine); }
+            else if (Time.time - dodgeSaidAt > DodgeSaid) { dodgeSaidAt = Time.time; Voice(Pick(DodgeLines)); }
             Vector3 away = RoomSense.Flat(transform.position - hand.Position);
             if (away.sqrMagnitude < 0.0001f) away = RoomSense.Flat(transform.position - hands.Head.position);
             Vector3 spot = room.FloorSpot(transform.position + away.normalized * 0.8f, 0.25f);
@@ -590,7 +590,7 @@ namespace CapriRoom
         {
             sulkSince = -1;
             throwsAt.Clear();
-            Say(Pick(lines));
+            Voice(Pick(lines));
         }
 
         private void SitOn(Surface ledge)
@@ -685,14 +685,8 @@ namespace CapriRoom
         {
             if (mode == Mode.Walking) Rest();   // she stops to talk
             if (!speaker.Ready) { Say(line); return; }
-            bubble.Say(line, 20);
-            speaker.Speak(line, delegate (AudioClip clip)
-            {
-                voice.clip = clip;
-                voice.Play();
-                if (mode == Mode.Idle && this.clip != null && this.clip.Name != "idle") Play("idle", true);
-                Say(line, clip.length / Mathf.Max(0.5f, voice.pitch) + 1.5f);
-            }, delegate (string problem)
+            bubble.Say("...", 20);
+            speaker.Speak(line, delegate (AudioClip spoken) { PlayLine(line, spoken); }, delegate (string problem)
             {
                 Say(line);
                 if (problem != null) Debug.Log("[Capri] " + problem);
@@ -719,14 +713,54 @@ namespace CapriRoom
             string line = name == "morning" ? "Good morning, choom." : name == "late" ? "Isn't it late, choom?" : "Miss me, choom?";
             if (speaker.Ready) { Talk(line); return; }   // her greeting in your Fish Audio voice
             AudioClip hello = Resources.Load<AudioClip>("CapriVoice/hello-" + name);
-            Say(line, hello != null ? hello.length : 3);
-            if (hello != null) voice.PlayOneShot(hello);
+            if (hello != null) PlayLine(line, hello);
+            else Say(line);
         }
+
+        // Her bubble, typed out at the desktop app's pace when there's no voice to keep time with.
+        private const float LettersPerSecond = 28;
 
         public void Say(string line, float seconds = 0)
         {
             float setting = CapriConfig.BubbleSeconds[Mathf.Clamp(CapriConfig.Bubble, 0, 2)];
-            bubble.Say(line, Mathf.Max(seconds, setting + line.Length * 0.03f));
+            float typing = line.Length / LettersPerSecond;
+            bubble.Type(line, LettersPerSecond, Mathf.Max(seconds - typing, setting + line.Length * 0.03f - typing, 1f));
+        }
+
+        // Plays a spoken line and types it into her bubble at the pace she says it, like the desktop app.
+        private void PlayLine(string line, AudioClip spoken)
+        {
+            voice.clip = spoken;
+            voice.Play();
+            if (mode == Mode.Idle && clip != null && clip.Name != "idle") Play("idle", true);
+            float seconds = spoken.length / Mathf.Max(0.5f, voice.pitch);
+            float letters = seconds < 0.2f ? LettersPerSecond : Mathf.Max(8, line.Length / seconds);
+            bubble.Type(line, letters, 1.5f);
+        }
+
+        // Her own short lines (pats, pokes, throws and the rest) said out loud in her Fish Audio voice, like the desktop app.
+        // Each one is only made once per voice and kept, so a pat sounds right away the next time. Without a voice set up,
+        // or while she's already talking, they're typed in her bubble instead.
+        private readonly Dictionary<string, AudioClip> spokenLines = new Dictionary<string, AudioClip>();
+        private string spokenWith;
+
+        private void Voice(string line)
+        {
+            if (!speaker.Ready || voice.isPlaying || speaker.Busy || brain.Busy) { Say(line); return; }
+            string with = CapriConfig.FishVoiceId + "|" + CapriConfig.FishModel + "|" + CapriConfig.Speed;
+            if (spokenWith != with) { spokenLines.Clear(); spokenWith = with; }
+            AudioClip saved;
+            if (spokenLines.TryGetValue(line, out saved) && saved != null) { PlayLine(line, saved); return; }
+            bubble.Say("...", 4);
+            speaker.Speak(line, delegate (AudioClip made)
+            {
+                spokenLines[line] = made;
+                PlayLine(line, made);
+            }, delegate (string problem)
+            {
+                Say(line);
+                if (problem != null) Debug.Log("[Capri] " + problem);
+            });
         }
 
         private void Mouth()

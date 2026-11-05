@@ -1,5 +1,11 @@
 # Capri Room patch notes
 
+## v1.0.3 (2026-11-04)
+
+**Added**
+- Her speech bubble types out her words as she says them, in time with her voice, like the desktop app. When she isn't speaking out loud, it types at 28 letters a second.
+- She says her own lines out loud: pats, pokes, being picked up, thrown, landing, dizzy, sulking, making up and "Coming, choom." These use your Fish Audio voice, like the desktop app. Each line is made once and kept, so it plays straight away the next time. Without a Fish voice set up, they stay in her bubble.
+
 ## v1.0.2 (2026-11-04)
 
 **Added**
