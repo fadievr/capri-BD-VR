@@ -1,6 +1,6 @@
 # Capri Room
 
-**Capri in your real room, on Meta Quest 3 and 3S.** A mixed-reality port of [Capri](https://github.com/lachydotmcg/capri-desktop), the glitchy desktop companion. She walks around your floor, sits on the edges of your furniture, naps when you ignore her, reacts when you pet, poke, grab or throw her, and talks with you through your headset.
+**Capri in your real room, on Meta Quest 2,3 and 3S.** A mixed-reality port of [Capri](https://github.com/lachydotmcg/capri-desktop), the glitchy desktop companion. She walks around your floor, sits on the edges of your furniture, naps when you ignore her, reacts when you pet, poke, grab or throw her, and talks with you through your headset.
 
 > Unofficial fan project, made with Lachy's permission. Not endorsed by CD Projekt Red, the anime's rights holders or its voice actors. Free and non-commercial.
 
