@@ -1,13 +1,5 @@
 # Capri Room patch notes
 
-## v1.0.5 (2026-11-05)
-
-**Added**
-- Offline hearing (Y → VOICE → Hearing → Built-in): Whisper runs on your Quest, so she hears you for free, with no key and no internet, and your voice never leaves the headset. It's the default for new setups if you haven't added a Groq key. It's a little slower and less accurate than Groq, and makes the app about 75 MB bigger.
-
-**Changed**
-- Hearing: Fish Audio's hearing has no free tier. The Free model only covers her voice. The Hearing choices now read Groq (free), Fish Audio (paid), OpenAI (paid) and Built-in (free, offline). If Fish turns hearing down for credit (HTTP 402), she switches Hearing to Groq if you've added its key, or to Built-in, and hears you again.
-
 ## v1.0.4 (2026-11-05)
 
 **Added**
@@ -23,6 +15,7 @@
   - Clearer messages when Fish says no (402, 429 and others), with Fish's own reason.
 - "Let her see": the headset camera prompt could get lost, so she never got the camera and her brain answered "I can't see" without a picture. She now asks again whenever you ask her to look. When she can't look, she tells you why herself: Let her see is off, the brain can't take pictures, the camera isn't allowed yet, or her eyes are still starting.
 - She notices more ways of asking her to look: "can you see me?", "do you see this?", "what am I wearing?".
+- Hearing: Fish Audio's hearing has no free tier. The Free model only covers her voice. The Hearing choices now read Groq (free), Fish Audio (paid) and OpenAI (paid). If Fish turns hearing down for credit (HTTP 402) and you've added a Groq key, she switches Hearing to Groq and hears you again.
 - Capri → Debug → Allow camera on headset grants the camera over USB. The Headset report now includes the passthrough camera log.
 
 ## v1.0.3 (2026-11-04)

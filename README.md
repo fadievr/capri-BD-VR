@@ -24,7 +24,7 @@ Press **Y** to open her settings, then point with the laser and pull the trigger
 | Tab | What to set |
 |---|---|
 | **BRAIN** | Pick an AI (NVIDIA free key, OpenAI, Claude or DeepSeek) and paste its key. |
-| **VOICE** | **Hearing:** Built-in (free, offline, no key: Whisper runs on the Quest) or Groq (free key from [console.groq.com](https://console.groq.com)). Fish Audio and OpenAI hearing need paid API credit. **Voice:** Fish Audio with your key, a voice from [fish.audio](https://fish.audio), and Fish model **Free** (the others need API credit, which a fish.audio plan doesn't include). |
+| **VOICE** | **Hearing:** Groq (free key from [console.groq.com](https://console.groq.com)). Fish Audio's hearing needs paid API credit. **Voice:** Fish Audio with your key, a voice from [fish.audio](https://fish.audio), and Fish model **Free** (the others need API credit, which a fish.audio plan doesn't include). |
 
 Keys stay on your headset and only go to the service they belong to. Paste them with her keyboard's **Paste** button after copying them in the Quest browser.
 
@@ -57,5 +57,3 @@ Capri's own code is in `Assets/Capri/`.
 - **Quest port:** Capri Room.
 
 Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Keep these credits if you share it, and don't sell it.
-
-Offline hearing uses [whisper.unity](https://github.com/Macoron/whisper.unity) (MIT) and OpenAI's Whisper tiny model, bundled in `Packages/com.whisper.unity` and `Assets/StreamingAssets/Whisper`.
