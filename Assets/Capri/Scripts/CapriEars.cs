@@ -1,5 +1,5 @@
-// Her ears: listens on your Quest's microphone, notices when you start and stop talking, and turns what you said into text,
-// either on the headset itself (Whisper, offline) or with Groq, Fish Audio or OpenAI (VOICE > Hearing). X mutes her mic.
+// Her ears: listens on your Quest's microphone, notices when you start and stop talking, and turns what you said into text
+// with Fish Audio (or OpenAI, if that's your brain and there's no Fish Audio key). X mutes and unmutes her mic.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -46,26 +46,7 @@ namespace CapriRoom
         private int recentSamples;
         private bool asked;
 
-        public bool Ready { get { return CapriConfig.Hearing == CapriConfig.OfflineHearing || !string.IsNullOrEmpty(Key); } }
-
-        // Offline hearing: whisper.cpp with the tiny multilingual model in StreamingAssets/Whisper. It's loaded the first
-        // time it's needed (a few seconds, about 150 MB of memory) and stays loaded.
-        private Whisper.WhisperManager whisper;
-        private static readonly System.Text.RegularExpressions.Regex Noise = new System.Text.RegularExpressions.Regex(@"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*");
-        private static readonly string[] Ghosts = { "thank you.", "thanks for watching!", "thank you for watching.", "thanks for watching.", "you", "bye.", "." };
-
-        private void WakeWhisper()
-        {
-            if (whisper != null) return;
-            GameObject holder = new GameObject("Capri offline hearing");
-            holder.SetActive(false);
-            holder.transform.SetParent(transform, false);
-            whisper = holder.AddComponent<Whisper.WhisperManager>();
-            whisper.logLevel = Whisper.Utils.LogLevel.Warning;
-            whisper.initialPrompt = "Capri, choom.";
-            holder.SetActive(true);   // loads the model
-            Debug.Log("[Capri] Loading offline hearing");
-        }
+        public bool Ready { get { return !string.IsNullOrEmpty(Key); } }
 
         // The key for whichever service is set to hear you (VOICE > Hearing).
         private static string Key
@@ -80,12 +61,11 @@ namespace CapriRoom
                 }
             }
         }
-        private static string Service { get { string name = CapriConfig.Hearings[Mathf.Clamp(CapriConfig.Hearing, 0, CapriConfig.Hearings.Length - 1)]; int cut = name.IndexOf(" ("); return cut > 0 ? name.Substring(0, cut) : name; } }
+        private static string Service { get { string name = CapriConfig.Hearings[Mathf.Clamp(CapriConfig.Hearing, 0, 2)]; int cut = name.IndexOf(" ("); return cut > 0 ? name.Substring(0, cut) : name; } }
 
         private void Update()
         {
             bool want = !CapriConfig.MicMuted && Ready;
-            if (want && CapriConfig.Hearing == CapriConfig.OfflineHearing) WakeWhisper();
             if (want && mic == null) StartMic();
             else if (!want && mic != null) StopMic();
             if (mic == null) { Listening = Hearing = false; return; }
@@ -188,7 +168,6 @@ namespace CapriRoom
         // Sends what you said off to be turned into text. If Fish Audio turns down the pro model, she tries its standard one once.
         private IEnumerator Send(float[] samples, string fishModel, bool mayRetry)
         {
-            if (CapriConfig.Hearing == CapriConfig.OfflineHearing) { yield return Offline(samples); yield break; }
             byte[] wav = CapriVoice.ToWav(samples, Rate);
             bool fish = CapriConfig.Hearing == 1;
             string code = CapriConfig.LanguageCodes[Mathf.Clamp(CapriConfig.Language, 0, CapriConfig.LanguageCodes.Length - 1)];
@@ -235,19 +214,18 @@ namespace CapriRoom
                         yield break;
                     }
                     // Fish's hearing is never free. With a Groq key set, she switches to Groq and hears this one again.
-                    if (fish && status == 402)
+                    if (fish && status == 402 && !string.IsNullOrEmpty(CapriConfig.GroqKey))
                     {
-                        bool groq = !string.IsNullOrEmpty(CapriConfig.GroqKey);
-                        CapriConfig.Hearing = groq ? 0 : CapriConfig.OfflineHearing;
-                        if (Trouble != null) Trouble("Fish Audio's hearing costs credit, so I switched Hearing to " + (groq ? "Groq (free)" : "Built-in (free)") + ". Your Fish voice still works.");
+                        CapriConfig.Hearing = 0;
+                        if (Trouble != null) Trouble("Fish Audio's hearing costs credit, so I switched Hearing to Groq (free). Your Fish voice still works.");
                         yield return Send(samples, fishModel, false);
                         yield break;
                     }
                     string why = Why(said);
                     if (Trouble != null) Trouble(
                         status == 401 || status == 403 ? Service + " won't take that key, so I can't hear you. Press Y and check Hearing under VOICE."
-                        : status == 402 && CapriConfig.Hearing == 1 ? "Fish Audio's hearing has no free tier. The Free model only covers my voice (HTTP 402). Press Y, then VOICE, set Hearing to Built-in (free, no key) or Groq (free)."
-                        : status == 402 ? Service + " needs credit to hear you (HTTP 402). Press Y and set Hearing to Built-in (free) under VOICE."
+                        : status == 402 && CapriConfig.Hearing == 1 ? "Fish Audio's hearing has no free tier. The Free model only covers my voice (HTTP 402). Press Y, then VOICE, set Hearing to Groq (free) and add a free Groq key from console.groq.com."
+                        : status == 402 ? Service + " needs credit to hear you (HTTP 402). Press Y and set Hearing to Groq (free) under VOICE."
                         : status == 429 ? "Too much talking for " + Service + "'s free limit. Give me a minute, choom."
                         : status == 0 ? "No signal: " + (web.error ?? "couldn't reach " + Service + ".")
                         : Service + " couldn't hear that (HTTP " + status + ")" + (why.Length > 0 ? ": " + why : "."));
@@ -255,27 +233,6 @@ namespace CapriRoom
                 text = text == null ? null : System.Text.RegularExpressions.Regex.Replace(text, @"<\|[^|]*\|>", "").Trim();
                 if (!string.IsNullOrEmpty(text) && text.Length > 1 && Said != null) Said(text);
             }
-        }
-
-        // Turns what you said into text on the headset, with no internet and no key.
-        private IEnumerator Offline(float[] samples)
-        {
-            WakeWhisper();
-            whisper.language = CapriConfig.LanguageCodes[Mathf.Clamp(CapriConfig.Language, 0, CapriConfig.LanguageCodes.Length - 1)];
-            System.Threading.Tasks.Task<Whisper.WhisperResult> job = whisper.GetTextAsync(samples, Rate, 1);
-            while (!job.IsCompleted) yield return null;
-            string text = job.Status == System.Threading.Tasks.TaskStatus.RanToCompletion && job.Result != null ? job.Result.Result : null;
-            if (text == null)
-            {
-                Debug.Log("[Capri] Offline hearing failed" + (job.Exception != null ? ": " + job.Exception.GetBaseException().Message : ""));
-                if (!whisper.IsLoaded && Trouble != null) Trouble("My offline hearing didn't load. Press Y and pick another Hearing under VOICE.");
-                yield break;
-            }
-            // Whisper writes sounds as [Music] or (laughs), and makes up a "Thank you." from near-silence.
-            text = Noise.Replace(text, " ").Trim();
-            text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
-            if (Array.IndexOf(Ghosts, text.ToLowerInvariant()) >= 0 || !System.Text.RegularExpressions.Regex.IsMatch(text, @"\p{L}")) yield break;
-            if (text.Length > 1 && Said != null) Said(text);
         }
     }
 }
