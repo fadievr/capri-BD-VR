@@ -672,7 +672,7 @@ namespace CapriRoom
             CapriConfig.MicMuted = !CapriConfig.MicMuted;
             settings.Refresh();
             if (CapriConfig.MicMuted) Say("Mic muted. I'll just read your lips. Kidding.");
-            else if (!ears.Ready) Say("Mic's on, but I need a key to hear you. Press Y, then VOICE > Hearing. Groq's is free.");
+            else if (!ears.Ready) Say("Mic's on, but I need a key to hear you. Press Y, then VOICE > Hearing, or pick Built-in: it's free and needs no key.");
             else Say("I'm listening, choom.");
         }
 

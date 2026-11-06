@@ -33,9 +33,16 @@ namespace CapriRoom
         public static readonly string[] FishModelNames = { "Free", "S2.1 Pro (credit)", "S2 Pro (credit)", "S1 (credit)" };
         public static int FishModelIndex { get { return Mathf.Max(0, System.Array.IndexOf(FishModels, Text("fishmodel"))); } set { Text("fishmodel", FishModels[Mathf.Clamp(value, 0, FishModels.Length - 1)]); } }
         public static string FishModel { get { return FishModels[FishModelIndex]; } }
-        // Who turns what you say into text. Groq's Whisper has a free tier; Fish Audio needs credit for this.
-        public static readonly string[] Hearings = { "Groq (free)", "Fish Audio (paid)", "OpenAI (paid)" };
-        public static int Hearing { get { return Get("hearing", 0); } set { Set("hearing", value); } }
+        // Who turns what you say into text. "On headset" runs Whisper on the Quest itself: free, no key, nothing leaves the
+        // headset. Groq's Whisper has a free tier; Fish Audio and OpenAI need credit for this.
+        public static readonly string[] Hearings = { "Groq (free)", "Fish Audio (paid)", "OpenAI (paid)", "On headset (free, offline)" };
+        public const int OfflineHearing = 3;
+        // Until you pick one: Groq if you've already added its key, otherwise on the headset.
+        public static int Hearing
+        {
+            get { int h = Get("hearing", -1); return h >= 0 && h < Hearings.Length ? h : string.IsNullOrEmpty(GroqKey) ? OfflineHearing : 0; }
+            set { Set("hearing", value); }
+        }
         public static string GroqKey { get { return Text("groqkey"); } set { Text("groqkey", value); } }
 
         // ---- SIGHT ----
