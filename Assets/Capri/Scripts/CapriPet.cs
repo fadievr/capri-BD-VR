@@ -305,8 +305,17 @@ namespace CapriRoom
 
         // ---------- Getting around ----------
 
+        private bool checkedClips;
+
         private void GlitchIn(Surface to)
         {
+            // Once, when she first appears: if any of her poses didn't load, she says so, so it can be fixed.
+            if (!checkedClips)
+            {
+                checkedClips = true;
+                CapriClips.Has("idle");
+                if (CapriClips.Problems.Count > 0) Say("Some of my poses didn't load (" + string.Join("; ", CapriClips.Problems) + "). Tell Claude.");
+            }
             SetVisible(true);
             standingOn = to.Raised ? to : null;
             seat = arriveAs;
@@ -779,7 +788,14 @@ namespace CapriRoom
         {
             lastAttention = Time.time;
             if (Sulking && SorryWords.IsMatch(said)) { MakeUp(SorryLines); return; }
-            if (Command(said)) return;
+            try { if (Command(said)) return; }
+            catch (Exception problem)
+            {
+                // Never let a command break her ears: say what went wrong so it can be fixed, and keep listening.
+                Debug.LogException(problem);
+                Say("Something glitched: " + problem.Message);
+                return;
+            }
             if (!brain.Ready) { Say("My brain's offline. Press Y and set one up under BRAIN."); return; }
             if (mode == Mode.Napping) { mode = Mode.Waking; Play("wake", false, Rest); }
             bubble.Say("...", 20);
@@ -1016,22 +1032,54 @@ namespace CapriRoom
             });
         }
 
+        // Her talking mouth, laid over her face. Standing (idle), lying down and in sit 2 each have their own set, drawn to
+        // sit exactly where her mouth is in that pose.
+        private string MouthClip
+        {
+            get
+            {
+                if (clip == null) return null;
+                if (clip.Name == "idle") return "mouth";
+                if (clip.Name == "lay") return "mouth_lay";
+                if (clip.Name == "perch_sit2") return "mouth_perch_sit2";
+                return null;
+            }
+        }
+
         private void Mouth()
         {
-            bool talking = voice.isPlaying && clip != null && clip.Name == "idle";
+            string shapesName = MouthClip;
+            bool talking = voice.isPlaying && shapesName != null;
             mouth.enabled = talking;
             if (!talking || Time.time < nextMouthFrame) return;
             nextMouthFrame = Time.time + 1f / 12f;
-            CapriClip shapes = CapriClips.Get("mouth");
+            CapriClip shapes = CapriClips.Get(shapesName);
+            if (shapes == null) { mouth.enabled = false; return; }
             mouth.sprite = shapes.Frames[UnityEngine.Random.Range(0, shapes.Frames.Length)];
         }
 
         // ---------- Looks ----------
 
+        // Lying on a ledge she can't turn more than this far from the line of its edge, so she always lies along it.
+        private const float LayTurnLimit = 20f;
+
         private void FaceYou()
         {
             Vector3 away = RoomSense.Flat(transform.position - hands.Head.position);
             if (away.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(away, Vector3.up);
+            if (Lying && standingOn != null && standingOn.Edge)
+            {
+                Vector3 along = RoomSense.Flat(standingOn.EdgeTo - standingOn.EdgeFrom);
+                if (along.sqrMagnitude > 0.0001f)
+                {
+                    along.Normalize();
+                    Vector3 right = transform.right;
+                    if (Vector3.Dot(right, along) < 0) along = -along;   // keep her head on the side it's already on
+                    float turn = Mathf.Clamp(Vector3.SignedAngle(along, right, Vector3.up), -LayTurnLimit, LayTurnLimit);
+                    right = Quaternion.AngleAxis(turn, Vector3.up) * along;
+                    transform.rotation = Quaternion.LookRotation(Vector3.Cross(right, Vector3.up), Vector3.up);
+                }
+            }
             bubble.transform.position = transform.position + Vector3.up * (size * (Lying ? 0.55f : Resting ? 0.75f : 1.08f) + 0.08f);
             bubble.Face(hands.Head.position);
             micTag.transform.position = bubble.transform.position + Vector3.up * 0.13f;

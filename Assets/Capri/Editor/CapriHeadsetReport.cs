@@ -33,7 +33,8 @@ namespace CapriRoom.EditorTools
                     var l = line.ToLowerInvariant();
                     if (l.Contains("[capri]") || l.Contains("mruk") || l.Contains("scene") || l.Contains("spatial")
                         || l.Contains("use_scene") || l.Contains("capriroom") || l.Contains("exception")
-                        || l.Contains("passthroughcamera") || l.Contains("headset_camera"))
+                        || l.Contains("passthroughcamera") || l.Contains("headset_camera")
+                        || l.Contains(" unity ") || l.Contains(" unity:") || l.Contains("androidruntime") || l.Contains(" crash"))
                         sb.AppendLine(line.TrimEnd());
                 }
             }

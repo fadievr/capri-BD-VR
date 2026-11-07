@@ -161,8 +161,8 @@ namespace CapriRoom
         private IEnumerator Transcribe(float[] samples)
         {
             Busy = true;
-            yield return Send(samples, "transcribe-1-pro", true);
-            Busy = false;
+            try { yield return Send(samples, "transcribe-1-pro", true); }
+            finally { Busy = false; }   // even if something goes wrong, she keeps listening
         }
 
         // Sends what you said off to be turned into text. If Fish Audio turns down the pro model, she tries its standard one once.
@@ -231,7 +231,11 @@ namespace CapriRoom
                         : Service + " couldn't hear that (HTTP " + status + ")" + (why.Length > 0 ? ": " + why : "."));
                 }
                 text = text == null ? null : System.Text.RegularExpressions.Regex.Replace(text, @"<\|[^|]*\|>", "").Trim();
-                if (!string.IsNullOrEmpty(text) && text.Length > 1 && Said != null) Said(text);
+                if (!string.IsNullOrEmpty(text) && text.Length > 1 && Said != null)
+                {
+                    try { Said(text); }
+                    catch (Exception problem) { Debug.LogException(problem); }
+                }
             }
         }
     }

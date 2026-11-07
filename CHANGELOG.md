@@ -3,7 +3,7 @@
 ## v1.0.5 (2026-11-06)
 
 **Added**
-- Two new ways to rest, with placeholder art until Blank's sprites are in: lying down (her dark leg swings slowly up and down) and a second sitting pose with one leg along the ledge and the other swinging a little from the knee. Both are animated at 60 frames a second. Each time she teleports to a ledge she picks lying, her original sit or the new sit, a third each. If the ledge is too short to lie on, she sits.
+- Two new ways to rest, with placeholder art until Blank's sprites are in: lying down (her dark leg swings slowly up and down) animated at 60 frames a second, and a second sitting pose with one leg along the ledge and the other hanging over it. Her mouth moves when she talks in both, sitting right where the anime puts it. Each time she teleports to a ledge she picks lying, her original sit or the new sit, a third each. If the ledge is too short to lie on, she sits. Lying on a ledge, she rests a little way in from the edge, and always lies along it: she turns to face you, but never more than 20 degrees off the edge's line.
 - Voice commands she does right away, without her brain:
   - "Lay by me" / "sit by me": she goes to the ledge nearest you and lies or sits on it. With no furniture near you, she lies on the floor beside you or stands there.
   - "Lay down", "sit up", "stand up": she changes how she's resting where she is.
@@ -17,6 +17,7 @@
 
 **Fixed**
 - Hand tracking: pats and pokes use your palm and index fingertip instead of your wrist, so petting her with your bare hand works.
+- If something goes wrong handling what you said, she tells you instead of going deaf, and keeps listening. If one of her poses fails to load, she uses a pose she has and says which one broke.
 
 ## v1.0.4 (2026-11-05)
 

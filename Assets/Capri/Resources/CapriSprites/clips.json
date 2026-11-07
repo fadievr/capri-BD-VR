@@ -254,15 +254,39 @@
   },
   {
    "name": "perch_sit2",
-   "count": 120,
-   "fps": 60,
+   "count": 1,
+   "fps": 1,
    "cellWidth": 470,
    "cellHeight": 476,
-   "columns": 17,
-   "rows": 8,
+   "columns": 1,
+   "rows": 1,
    "pivotX": 0.5319,
    "pivotY": 0.2752,
    "unitsHigh": 0.8095
+  },
+  {
+   "name": "mouth_perch_sit2",
+   "count": 5,
+   "fps": 12,
+   "cellWidth": 64,
+   "cellHeight": 64,
+   "columns": 5,
+   "rows": 1,
+   "pivotX": 0.4233,
+   "pivotY": -1.7313,
+   "unitsHigh": 0.10884
+  },
+  {
+   "name": "mouth_lay",
+   "count": 5,
+   "fps": 12,
+   "cellWidth": 80,
+   "cellHeight": 80,
+   "columns": 5,
+   "rows": 1,
+   "pivotX": -1.8908,
+   "pivotY": 0.0939,
+   "unitsHigh": 0.13333
   }
  ]
 }
