@@ -18,6 +18,7 @@
 **Fixed**
 - Hand tracking: pats and pokes use your palm and index fingertip instead of your wrist, so petting her with your bare hand works.
 - If something goes wrong handling what you said, she tells you instead of going deaf, and keeps listening. If one of her poses fails to load, she uses a pose she has and says which one broke.
+- "Lay down" left her sitting: Unity's incremental build shipped a stale copy of her old pose list, without lay or sit 2. Release builds are now always clean. Her lying sheet is also smaller (3976x3420), and if a pose ever fails to load she tells you instead of quietly sitting.
 
 ## v1.0.4 (2026-11-05)
 

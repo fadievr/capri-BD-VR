@@ -314,7 +314,6 @@ namespace CapriRoom
             {
                 checkedClips = true;
                 CapriClips.Has("idle");
-                if (CapriClips.Problems.Count > 0) Say("Some of my poses didn't load (" + string.Join("; ", CapriClips.Problems) + "). Tell Claude.");
             }
             SetVisible(true);
             standingOn = to.Raised ? to : null;
@@ -330,9 +329,11 @@ namespace CapriRoom
                 if (to.Edge || seat == Seat.Lay) perchUntil = Time.time + UnityEngine.Random.Range(secondsSittingOnFurniture.x, secondsSittingOnFurniture.y) * (commanded ? 2 : 1);
                 commanded = false;
                 nextWander = Time.time + UnityEngine.Random.Range(secondsBetweenWanders.x, secondsBetweenWanders.y);
-                if (!greeted) { greeted = true; Greet(); }
+                if (!greeted) { greeted = true; Greet(); if (CapriClips.Problems.Count > 0) Invoke(nameof(SayProblems), 6f); }
             });
         }
+
+        private void SayProblems() { Say("Some of my poses didn't load (" + string.Join("; ", CapriClips.Problems) + "). Tell Claude.", 12f); }
 
         private bool commanded;   // you told her where to go, so she stays a good while
 
@@ -373,7 +374,7 @@ namespace CapriRoom
         private Seat RollSeat(Surface ledge)
         {
             int roll = UnityEngine.Random.Range(0, 3);
-            if (roll == 0 && RoomSense.FitsLying(ledge, size)) return Seat.Lay;
+            if (roll == 0 && CapriClips.Has("lay") && RoomSense.FitsLying(ledge, size)) return Seat.Lay;
             if (roll == 0) return UnityEngine.Random.value < 0.5f ? Seat.Sit1 : Seat.Sit2;
             return roll == 1 ? Seat.Sit1 : Seat.Sit2;
         }
@@ -843,6 +844,7 @@ namespace CapriRoom
             Vector3 you = hands.Head.position;
             Surface ledge = room.LedgeNearYou(you, stayWithin);
             commanded = true;
+            if (want == Seat.Lay && !CanLie()) return;
             if (ledge != null)
             {
                 if (want == Seat.Lay && !RoomSense.FitsLying(ledge, size)) { want = UnityEngine.Random.value < 0.5f ? Seat.Sit1 : Seat.Sit2; Voice(Pick(NoRoomLines)); }
@@ -860,6 +862,7 @@ namespace CapriRoom
         {
             bool edge = standingOn != null && standingOn.Edge;
             if (Lying) return;
+            if (!CanLie()) return;
             if (edge && !RoomSense.FitsLying(standingOn, size)) { Voice("Not enough room to lie down here."); return; }
             if (edge) transform.position = RoomSense.LayPoint(standingOn, size);
             if (standingOn != null && !standingOn.Edge) { Voice("Not here. Ask me to lay by you."); return; }
@@ -867,6 +870,17 @@ namespace CapriRoom
             mode = Mode.Perched;
             perchUntil = Time.time + 2 * UnityEngine.Random.Range(secondsSittingOnFurniture.x, secondsSittingOnFurniture.y);
             Play("lay", true);
+        }
+
+        // Her lying pose has to have loaded; if it didn't she says why instead of quietly sitting.
+        private bool CanLie()
+        {
+            if (CapriClips.Has("lay")) return true;
+            string why = CapriClips.Problems.Find(p => p.StartsWith("lay"));
+            string all = string.Join("; ", CapriClips.Problems);
+            Debug.LogError("[Capri] lay missing. Problems: " + all);
+            Say("My lying pose didn't load (" + (why ?? (all.Length > 0 ? all : "no error, it's just not there")) + "). Tell Claude.", 15f);
+            return false;
         }
 
         // "Sit up": from lying on a ledge back to sitting. On the floor there's nothing to sit on, so she stands.

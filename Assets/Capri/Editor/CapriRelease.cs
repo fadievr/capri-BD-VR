@@ -64,7 +64,8 @@ namespace CapriRoom.EditorTools
                 scenes = new[] { "Assets/Scenes/SampleScene.unity" },
                 locationPathName = output,
                 target = BuildTarget.Android,
-                options = BuildOptions.None
+                // A clean build every time: an incremental one shipped a stale copy of her old poses next to the new ones.
+                options = BuildOptions.CleanBuildCache
             };
             var report = BuildPipeline.BuildPlayer(options);
             Debug.Log("[Capri] Release build " + report.summary.result + ": " + output);

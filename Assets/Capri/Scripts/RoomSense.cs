@@ -103,10 +103,10 @@ namespace CapriRoom
         {
             if (room == null) return fallbackFloorY;
             Ray down = new Ray(point + Vector3.up * 0.05f, Vector3.down);
-            MRUKAnchor hit;
-            Vector3 normal;
-            Pose pose = room.GetBestPoseFromRaycast(down, 4f, new LabelFilter(Ground), out hit, out normal);
-            float ground = hit != null ? pose.position.y : FloorY;
+            // A plain raycast: the "best pose" one builds a rotation looking straight down and logs a warning every frame.
+            RaycastHit hit;
+            MRUKAnchor anchor;
+            float ground = room.Raycast(down, 4f, new LabelFilter(Ground), out hit, out anchor) ? hit.point.y : FloorY;
             // A ray that starts inside a piece of furniture misses it. That happens when you let go of her
             // just above a desk, because she dangles below your hand. So also catch any furniture top
             // she's over that is no more than half a metre above her.
@@ -237,7 +237,10 @@ namespace CapriRoom
             along /= length;
             float at = Vector3.Dot(ledge.Point - ledge.EdgeFrom, along);
             float keep = Mathf.Min(length * 0.5f, size * 0.5f);
-            return ledge.EdgeFrom + along * Mathf.Clamp(at, keep, length - keep);
+            // Lying, she sits further onto the top than her usual 3 cm from the edge, so she's resting on it rather than
+            // balanced on the lip: about a quarter of her size in, but never past the middle of the top.
+            float inset = Mathf.Clamp(ledge.Depth * 0.5f - 0.03f, 0f, size * 0.25f);
+            return ledge.EdgeFrom + along * Mathf.Clamp(at, keep, length - keep) - ledge.EdgeOutward * inset;
         }
 
         // The flat top of a piece of furniture, in the anchor's own coordinates (x and y across it, z up out of it).
