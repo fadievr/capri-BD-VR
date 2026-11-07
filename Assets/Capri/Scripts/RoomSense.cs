@@ -14,6 +14,9 @@ namespace CapriRoom
         public bool Raised;          // on furniture, not the floor
         public bool Edge;            // on the edge of the furniture, so she can sit with her legs hanging
         public Vector3 EdgeOutward;  // which way the edge faces (her legs hang that way)
+        public Vector3 EdgeFrom, EdgeTo;   // the two ends of the edge she's on, 3 cm in from it, so she knows how long it is
+        public float Depth;          // how far the top goes back from the edge
+        public float Length { get { return Vector3.Distance(EdgeFrom, EdgeTo); } }
     }
 
     public class RoomSense : MonoBehaviour
@@ -204,6 +207,39 @@ namespace CapriRoom
             return best;
         }
 
+        // The furniture edge nearest to you (for "sit by me" and "lay by me"), within maxDistance of where you're standing.
+        public Surface LedgeNearYou(Vector3 you, float maxDistance)
+        {
+            Surface best = null;
+            float bestDistance = float.MaxValue;
+            foreach (MRUKAnchor top in Tops())
+            {
+                float distance;
+                Surface edge = EdgeOf(top, you, out distance);
+                float flat = Flat(edge.Point - you).magnitude;
+                if (flat <= maxDistance && flat < bestDistance) { best = edge; bestDistance = flat; }
+            }
+            return best;
+        }
+
+        // Lying down she's about her own size long and needs a little depth. Her hair can hang over the end.
+        public static bool FitsLying(Surface ledge, float size)
+        {
+            return ledge != null && ledge.Edge && ledge.Length >= size * 1.05f && ledge.Depth >= Mathf.Min(0.2f, size * 0.3f);
+        }
+
+        // Where on the edge to lie so her feet and head stay on it: as close to where she was headed as fits.
+        public static Vector3 LayPoint(Surface ledge, float size)
+        {
+            Vector3 along = ledge.EdgeTo - ledge.EdgeFrom;
+            float length = along.magnitude;
+            if (length < 0.001f) return ledge.Point;
+            along /= length;
+            float at = Vector3.Dot(ledge.Point - ledge.EdgeFrom, along);
+            float keep = Mathf.Min(length * 0.5f, size * 0.5f);
+            return ledge.EdgeFrom + along * Mathf.Clamp(at, keep, length - keep);
+        }
+
         // The flat top of a piece of furniture, in the anchor's own coordinates (x and y across it, z up out of it).
         // Space Setup furniture is usually a 3D box (VolumeBounds) rather than a flat plane, so use the box's top face.
         private static bool TopRect(MRUKAnchor anchor, out Rect rect, out float topZ)
@@ -251,7 +287,17 @@ namespace CapriRoom
             else inside.y = outward.y < 0 ? rect.yMin + 0.03f : rect.yMax - 0.03f;
             Vector3 outwardWorld = Flat(top.transform.TransformDirection(new Vector3(outward.x, outward.y, 0))).normalized;
             Vector3 point = top.transform.TransformPoint(new Vector3(inside.x, inside.y, topZ));
-            return new Surface { Point = point, Raised = true, Edge = true, EdgeOutward = outwardWorld };
+            // The whole edge she's on, end to end, and how deep the top is behind it.
+            Vector2 from, to;
+            float depth;
+            if (outward.x != 0) { from = new Vector2(inside.x, rect.yMin); to = new Vector2(inside.x, rect.yMax); depth = rect.width; }
+            else { from = new Vector2(rect.xMin, inside.y); to = new Vector2(rect.xMax, inside.y); depth = rect.height; }
+            return new Surface
+            {
+                Point = point, Raised = true, Edge = true, EdgeOutward = outwardWorld, Depth = depth,
+                EdgeFrom = top.transform.TransformPoint(new Vector3(from.x, from.y, topZ)),
+                EdgeTo = top.transform.TransformPoint(new Vector3(to.x, to.y, topZ))
+            };
         }
 
         public static Vector3 Flat(Vector3 v) { v.y = 0; return v; }

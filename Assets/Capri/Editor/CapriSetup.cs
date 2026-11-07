@@ -16,7 +16,7 @@ namespace CapriRoom.EditorTools
             importer.mipmapEnabled = true;                         // less shimmer when she's across the room
             importer.wrapMode = TextureWrapMode.Clamp;
             importer.filterMode = FilterMode.Bilinear;
-            importer.maxTextureSize = 4096;
+            importer.maxTextureSize = 8192;   // the 60 fps poses are big sheets; Quest 3 handles 8192
             importer.textureCompression = TextureImporterCompression.Compressed;
         }
     }

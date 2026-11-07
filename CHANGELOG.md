@@ -1,5 +1,23 @@
 # Capri Room patch notes
 
+## v1.0.5 (2026-11-06)
+
+**Added**
+- Two new ways to rest, with placeholder art until Blank's sprites are in: lying down (her dark leg swings slowly up and down) and a second sitting pose with one leg along the ledge and the other swinging a little from the knee. Both are animated at 60 frames a second. Each time she teleports to a ledge she picks lying, her original sit or the new sit, a third each. If the ledge is too short to lie on, she sits.
+- Voice commands she does right away, without her brain:
+  - "Lay by me" / "sit by me": she goes to the ledge nearest you and lies or sits on it. With no furniture near you, she lies on the floor beside you or stands there.
+  - "Lay down", "sit up", "stand up": she changes how she's resting where she is.
+  - "Come here": she walks over if she's close on the floor, or glitches over to you.
+  - Sulking, she won't take orders until you say sorry.
+
+**Changed**
+- Pats now need your hand to go side to side over her head. Just touching her head isn't a pat any more.
+- Pokes now need a quick jab into her. A slow touch isn't a poke.
+- Muting or unmuting the mic (X) shows on its own small label above her bubble, and no longer cuts off what she's saying.
+
+**Fixed**
+- Hand tracking: pats and pokes use your palm and index fingertip instead of your wrist, so petting her with your bare hand works.
+
 ## v1.0.4 (2026-11-05)
 
 **Added**

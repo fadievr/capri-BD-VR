@@ -1,5 +1,7 @@
 // Your two hands, whether you're holding Touch controllers or using hand tracking.
 // "Grabbing" is the grip button on a controller, or a pinch with a tracked hand.
+// With tracked hands, Position is the middle of your palm (not your wrist), and Tip is your index fingertip, so pats and
+// pokes land where your hand really is.
 using UnityEngine;
 
 namespace CapriRoom
@@ -19,19 +21,35 @@ namespace CapriRoom
         public bool Clicked;
         public bool Controller;
 
-        private readonly Vector3[] history = new Vector3[6];
-        private readonly float[] times = new float[6];
-        private int next;
+        // What she gets poked with: your index fingertip with tracked hands, the controller itself otherwise.
+        public Vector3 Tip, TipVelocity;
 
-        public void Track(Vector3 position, float now)
+        private readonly Mover hand = new Mover(), tip = new Mover();
+
+        public void Track(Vector3 position, Vector3 fingertip, float now)
         {
             Position = position;
-            history[next] = position;
-            times[next] = now;
-            int oldest = (next + 1) % history.Length;
-            next = oldest;
-            float span = now - times[oldest];
-            Velocity = span > 0.0001f && times[oldest] > 0 ? (position - history[oldest]) / span : Vector3.zero;
+            Velocity = hand.Move(position, now);
+            Tip = fingertip;
+            TipVelocity = tip.Move(fingertip, now);
+        }
+
+        // Speed over the last few frames, so one jittery frame doesn't count.
+        private sealed class Mover
+        {
+            private readonly Vector3[] history = new Vector3[6];
+            private readonly float[] times = new float[6];
+            private int next;
+
+            public Vector3 Move(Vector3 position, float now)
+            {
+                history[next] = position;
+                times[next] = now;
+                int oldest = (next + 1) % history.Length;
+                next = oldest;
+                float span = now - times[oldest];
+                return span > 0.0001f && times[oldest] > 0 ? (position - history[oldest]) / span : Vector3.zero;
+            }
         }
     }
 
@@ -69,13 +87,35 @@ namespace CapriRoom
             Read(RightHand, rig.rightHandAnchor, rightTracked, OVRInput.Controller.RTouch);
         }
 
+        // The hand anchor sits at your wrist, a hand's length from where you'd touch her, so use the hand's own bones:
+        // the palm (or the middle knuckle on older skeletons) and the index fingertip.
+        private static void HandPoints(OVRHand tracked, ref Vector3 palm, ref Vector3 fingertip)
+        {
+            OVRSkeleton skeleton = tracked.GetComponent<OVRSkeleton>();
+            if (skeleton == null || !skeleton.IsInitialized || !skeleton.IsDataValid || skeleton.Bones == null) return;
+            Transform palmBone = null, knuckle = null, tipBone = null;
+            foreach (OVRBone bone in skeleton.Bones)
+            {
+                if (bone == null || bone.Transform == null) continue;
+                string name = bone.Id.ToString();
+                if (name.EndsWith("Palm")) palmBone = bone.Transform;
+                else if (name.EndsWith("Middle1") || name.EndsWith("MiddleProximal")) knuckle = bone.Transform;
+                else if (name.EndsWith("IndexTip")) tipBone = bone.Transform;
+            }
+            if (palmBone != null) palm = palmBone.position;
+            else if (knuckle != null) palm = knuckle.position;
+            if (tipBone != null) fingertip = tipBone.position;
+        }
+
         private void Read(HandState state, Transform anchor, OVRHand tracked, OVRInput.Controller controller)
         {
             bool controllerOn = OVRInput.IsControllerConnected(controller);
             bool handOn = tracked != null && tracked.IsTracked && tracked.IsDataHighConfidence;
             state.Tracked = controllerOn || handOn;
             state.Controller = controllerOn;
-            state.Track(anchor.position, Time.time);
+            Vector3 palm = anchor.position, fingertip = anchor.position;
+            if (!controllerOn && handOn) HandPoints(tracked, ref palm, ref fingertip);
+            state.Track(palm, fingertip, Time.time);
             if (!controllerOn && handOn && tracked.IsPointerPoseValid && tracked.PointerPose != null)
             {
                 state.PointFrom = tracked.PointerPose.position;

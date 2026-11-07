@@ -239,6 +239,30 @@
    "pivotX": 0.2431,
    "pivotY": 0.3177,
    "unitsHigh": 1.0
+  },
+  {
+   "name": "lay",
+   "count": 120,
+   "fps": 60,
+   "cellWidth": 829,
+   "cellHeight": 380,
+   "columns": 9,
+   "rows": 14,
+   "pivotX": 0.4451,
+   "pivotY": 0.2303,
+   "unitsHigh": 0.6333
+  },
+  {
+   "name": "perch_sit2",
+   "count": 120,
+   "fps": 60,
+   "cellWidth": 470,
+   "cellHeight": 476,
+   "columns": 17,
+   "rows": 8,
+   "pivotX": 0.5319,
+   "pivotY": 0.2752,
+   "unitsHigh": 0.8095
   }
  ]
 }

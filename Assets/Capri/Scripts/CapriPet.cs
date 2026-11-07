@@ -7,11 +7,14 @@
 //                floor, and a hard landing leaves her dizzy. Three throws in two minutes and she sulks until you say
 //                sorry, pat her head, or leave her alone for five minutes. Like the desktop app (Capri 0.8.3).
 //   Resize her:  while holding her with a controller, push its thumbstick up or down.
-//   Pet her:     move your hand gently near her head.
+//   Pet her:     move your hand side to side over her head, with a controller or your bare hand.
+//   Poke her:    jab her quickly with a controller or a fingertip. A slow touch isn't a poke.
 //   Talk:        just talk. She listens on the headset's mic (needs a Fish Audio key, or OpenAI as her brain).
 //   Mute mic:    X.
 //   Bop:         A, while she's sitting on a ledge.
-//   Come here:   B.
+//   Come here:   B, or say "come here".
+//   Say:         "sit by me" or "lay by me" and she finds the ledge nearest you and sits or lies down on it. "Lay down",
+//                "sit up" and "stand up" change how she's resting where she is.
 //   Settings:    Y opens her settings: BRAIN, VOICE, YOU and MOVES.
 //   Let her see: Y → YOU. She can look through your Quest's camera when you ask ("what do you see?", "look at this"),
 //                and with Watch me she glances now and then and says something about it, like the desktop app's
@@ -39,6 +42,9 @@ namespace CapriRoom
         public Vector2 secondsSittingOnFurniture = new Vector2(20, 60);
 
         private enum Mode { Waiting, GlitchingOut, GlitchingIn, Idle, Walking, Perched, Held, Falling, Napping, Waking, Dancing, Reacting }
+        // How she rests in Perched mode: sit 1 (her original perch), sit 2 (one leg along the ledge), or lying down. She can
+        // lie on the floor too; sitting needs a ledge.
+        private enum Seat { Sit1, Sit2, Lay }
 
         private static readonly string[] PetLines =
         {
@@ -62,6 +68,16 @@ namespace CapriRoom
         private static readonly string[] AloneLines = { "...Okay, I'm over it.", "Fine. I missed you. A little." };
         private const string FirstDodgeLine = "No. Don't touch me.";
         private static readonly Regex SorryWords = new Regex(@"\b(sorry|sry|soz|sowwy|apologi[sz]e|my bad|forgive me|lo siento|perd[oó]n|d[eé]sol[eé]e?|entschuldigung|scusa|desculpa)\b", RegexOptions.IgnoreCase);
+
+        // Things you can tell her to do. Handled right away, without her brain.
+        private static readonly Regex LayByMe = new Regex(@"\b(come\s+)?(lay|lie)(\s+down)?\s+(by|next\s+to|beside|with|near|over\s+by)\s+me\b", RegexOptions.IgnoreCase);
+        private static readonly Regex SitByMe = new Regex(@"\b(come\s+)?sit(\s+down)?\s+(by|next\s+to|beside|with|near|over\s+by)\s+me\b", RegexOptions.IgnoreCase);
+        private static readonly Regex LayDown = new Regex(@"\b(lay|lie)\s+(down|back)\b", RegexOptions.IgnoreCase);
+        private static readonly Regex SitUp = new Regex(@"\bsit\s+(up|down)\b", RegexOptions.IgnoreCase);
+        private static readonly Regex StandUp = new Regex(@"\b(stand|get)\s+up\b", RegexOptions.IgnoreCase);
+        private static readonly Regex ComeOver = new Regex(@"\b(come\s+(here|over(\s+here)?|to\s+me|closer)|get\s+over\s+here)\b", RegexOptions.IgnoreCase);
+        private static readonly string[] OnMyWayLines = { "On my way.", "Coming, choom.", "Scooting over." };
+        private static readonly string[] NoRoomLines = { "Not enough room to lie down there. I'll sit.", "Too small to stretch out on. Sitting instead." };
 
         private static readonly string[] WakeLines = { "Mm? I'm up. I'm up.", "Was I asleep? Don't tell anyone.", "Rebooting... hi." };
 
@@ -90,13 +106,16 @@ namespace CapriRoom
         private Action clipDone;
 
         private Surface standingOn;            // null = the floor
+        private Seat seat;                     // how she's resting while Perched
+        private Seat arriveAs;                 // how she'll rest where she's teleporting to
         private Vector3 walkTarget;
         private Surface teleportTarget;
-        private float nextWander, perchUntil, nextBlink, lastAttention, gazeHeld, petHeld, reactCooldown;
+        private float nextWander, perchUntil, nextBlink, lastAttention, gazeHeld, reactCooldown;
         private Vector3 velocity;
         private HandState holder;
         private float fallStarted, nextShadowCheck, shadowY, nextMouthFrame;
         private bool greeted, wasHearing;
+        private SpeechBubble micTag;           // the mic's own little label, so muting never cuts off what she's saying
         private CapriSettings settings;
         private CapriBrain brain;
         private CapriVoice speaker;
@@ -162,6 +181,8 @@ namespace CapriRoom
             shadow.sortingOrder = -1;
 
             bubble = SpeechBubble.Make(transform);
+            micTag = SpeechBubble.Make(transform);
+            micTag.transform.localScale = Vector3.one * 0.6f;
             voice = gameObject.AddComponent<AudioSource>();
             voice.spatialBlend = 1;           // her voice comes from where she is
             voice.minDistance = 0.5f;
@@ -271,10 +292,16 @@ namespace CapriRoom
 
         private void Rest()
         {
-            if (standingOn != null && standingOn.Edge) { mode = Mode.Perched; Play("perch", true); }
+            bool edge = standingOn != null && standingOn.Edge;
+            if (!edge && seat != Seat.Lay) seat = Seat.Sit1;   // only lying works off a ledge
+            if (edge || seat == Seat.Lay) { mode = Mode.Perched; Play(SeatClip, true); }
             else { mode = Mode.Idle; Play("idle", true); }
             nextBlink = Time.time + UnityEngine.Random.Range(2.5f, 6f);
         }
+
+        private string SeatClip { get { return seat == Seat.Lay ? "lay" : seat == Seat.Sit2 ? "perch_sit2" : "perch"; } }
+        private bool Resting { get { return mode == Mode.Perched; } }
+        private bool Lying { get { return mode == Mode.Perched && seat == Seat.Lay; } }
 
         // ---------- Getting around ----------
 
@@ -282,20 +309,27 @@ namespace CapriRoom
         {
             SetVisible(true);
             standingOn = to.Raised ? to : null;
+            seat = arriveAs;
+            arriveAs = Seat.Sit1;
+            if (seat == Seat.Lay && to.Edge) to.Point = RoomSense.LayPoint(to, size);
             transform.position = to.Point;
             mode = Mode.GlitchingIn;
             bool quietly = !greeted && !CapriConfig.GlitchIn;   // "Glitch in at startup" off: she's just there
             Play(quietly ? (to.Edge ? "perch" : "idle") : to.Edge ? "perch_arrive" : "arrive", false, delegate
             {
                 Rest();
-                if (to.Edge) perchUntil = Time.time + UnityEngine.Random.Range(secondsSittingOnFurniture.x, secondsSittingOnFurniture.y);
+                if (to.Edge || seat == Seat.Lay) perchUntil = Time.time + UnityEngine.Random.Range(secondsSittingOnFurniture.x, secondsSittingOnFurniture.y) * (commanded ? 2 : 1);
+                commanded = false;
                 nextWander = Time.time + UnityEngine.Random.Range(secondsBetweenWanders.x, secondsBetweenWanders.y);
                 if (!greeted) { greeted = true; Greet(); }
             });
         }
 
-        private void GlitchTo(Surface to)
+        private bool commanded;   // you told her where to go, so she stays a good while
+
+        private void GlitchTo(Surface to, Seat rest = Seat.Sit1)
         {
+            arriveAs = rest;
             teleportTarget = to;
             mode = Mode.GlitchingOut;
             bool perched = standingOn != null && standingOn.Edge;
@@ -315,14 +349,24 @@ namespace CapriRoom
             Vector3 you = hands.Head.position;
             if (UnityEngine.Random.value < chanceToSitOnFurniture)
             {
-                Surface seat = room.FurnitureSpot(you, stayWithin + 0.5f);
-                if (seat != null) { GlitchTo(seat); return; }
+                Surface ledge = room.FurnitureSpot(you, stayWithin + 0.5f);
+                if (ledge != null) { GlitchTo(ledge, RollSeat(ledge)); return; }
             }
             Vector3 spot = room.FloorSpot(you, stayWithin);
             if (standingOn != null) { GlitchTo(new Surface { Point = spot }); return; }
             walkTarget = spot;
             mode = Mode.Walking;
             Play("walk", true);
+        }
+
+        // Teleporting to a ledge she lies down, sits like before, or sits with one leg along it: a third each. A ledge too
+        // small to lie on and she sits.
+        private Seat RollSeat(Surface ledge)
+        {
+            int roll = UnityEngine.Random.Range(0, 3);
+            if (roll == 0 && RoomSense.FitsLying(ledge, size)) return Seat.Lay;
+            if (roll == 0) return UnityEngine.Random.value < 0.5f ? Seat.Sit1 : Seat.Sit2;
+            return roll == 1 ? Seat.Sit1 : Seat.Sit2;
         }
 
         private void Idle()
@@ -356,10 +400,10 @@ namespace CapriRoom
         private void Perched()
         {
             if (clip != null && clip.Name == "perch_music") return;   // bopping along; A or X stops it
-            if (Time.time > nextBlink)
+            if (Time.time > nextBlink && seat == Seat.Sit1)
             {
                 nextBlink = Time.time + UnityEngine.Random.Range(2.5f, 6f);
-                Play(UnityEngine.Random.value < 0.15f ? "perch_blink_glitch" : "perch_blink", false, delegate { if (mode == Mode.Perched) Play("perch", true); });
+                Play(UnityEngine.Random.value < 0.15f ? "perch_blink_glitch" : "perch_blink", false, delegate { if (mode == Mode.Perched) Play(SeatClip, true); });
             }
             if (Wandering && Time.time > perchUntil && Time.time - lastAttention > 5) GlitchTo(new Surface { Point = room.FloorSpot(hands.Head.position, stayWithin) });
         }
@@ -375,8 +419,49 @@ namespace CapriRoom
 
         // ---------- You and her ----------
 
-        private Vector3 HeadPoint { get { return transform.position + Vector3.up * size * (standingOn != null && standingOn.Edge ? 0.45f : 0.82f); } }
-        private Vector3 MiddlePoint { get { return transform.position + Vector3.up * size * 0.5f; } }
+        private Vector3 HeadPoint
+        {
+            get
+            {
+                if (Lying) return transform.position + transform.right * size * 0.42f + Vector3.up * size * 0.1f;   // her head's to your right
+                return transform.position + Vector3.up * size * (Resting ? 0.42f : 0.82f);
+            }
+        }
+        private Vector3 MiddlePoint { get { return transform.position + Vector3.up * size * (Lying ? 0.15f : 0.5f); } }
+
+        // Pats: your hand has to go side to side over her head, turning back at least twice within a second or so.
+        // Pokes: a quick jab into her, with a controller or a fingertip, moving toward her.
+        private const float PatSwing = 0.1f, PatTurnsWithin = 1.2f, PokeSpeed = 1.2f;
+        private sealed class Stroke { public int Way; public readonly List<float> Turns = new List<float>(); public bool TipInside; }
+        private readonly Stroke leftStroke = new Stroke(), rightStroke = new Stroke();
+
+        // True when this hand just turned back for the second time while moving side to side over her head.
+        private bool Patting(HandState hand, Stroke stroke, bool overHead)
+        {
+            float now = Time.time;
+            stroke.Turns.RemoveAll(t => now - t > PatTurnsWithin);
+            if (!overHead || hand.Grabbing) { stroke.Way = 0; stroke.Turns.Clear(); return false; }
+            float across = Vector3.Dot(hand.Velocity, transform.right);
+            if (Mathf.Abs(across) < PatSwing || hand.Velocity.magnitude > 1.2f) return false;
+            int way = across > 0 ? 1 : -1;
+            if (stroke.Way != 0 && way != stroke.Way) stroke.Turns.Add(now);
+            stroke.Way = way;
+            if (stroke.Turns.Count < 2) return false;
+            stroke.Turns.Clear();
+            return true;
+        }
+
+        // True when this hand's fingertip (or controller) just went into her fast, heading toward her.
+        private bool Poked(HandState hand, Stroke stroke, float reach)
+        {
+            Vector3 toHer = MiddlePoint - hand.Tip;
+            bool inside = toHer.magnitude < reach;
+            bool entered = inside && !stroke.TipInside;
+            stroke.TipInside = inside;
+            if (!entered || hand.Grabbing) return false;
+            float towardHer = toHer.sqrMagnitude > 0.0001f ? Vector3.Dot(hand.TipVelocity, toHer.normalized) : 0;
+            return towardHer >= PokeSpeed;
+        }
 
         private void Interact()
         {
@@ -404,7 +489,7 @@ namespace CapriRoom
                 if (busy) continue;
 
                 if (hand.ButtonTwoDown && !hand.Left && mode != Mode.Held) { ComeHere(); return; }
-                if (hand.ButtonOneDown && !hand.Left && mode == Mode.Perched) { ToggleDance(); return; }   // no standing dance, only bopping on a ledge
+                if (hand.ButtonOneDown && !hand.Left && mode == Mode.Perched && standingOn != null && standingOn.Edge) { ToggleDance(); return; }   // no standing dance, only bopping on a ledge
 
                 // You can catch her mid-air. Sulking, she won't let you: she glitches a hop away instead.
                 if (mode != Mode.Held && hand.GrabStarted && fromMiddle < reach + 0.1f)
@@ -414,15 +499,14 @@ namespace CapriRoom
                     return;
                 }
 
-                if (mode == Mode.Held || mode == Mode.Falling || mode == Mode.Napping) continue;
-                float speed = hand.Velocity.magnitude;
-                float fromHead = Vector3.Distance(hand.Position, HeadPoint);
-                if (speed > 1.6f && fromMiddle < reach && Time.time > reactCooldown) { React("glitch", "perch_glitch", Pick(PokeLines)); return; }
-                if (!hand.Grabbing && fromHead < Mathf.Max(0.15f, size * 0.3f) && speed > 0.08f && speed < 1.2f)
+                Stroke stroke = hand.Left ? leftStroke : rightStroke;
+                if (mode == Mode.Held || mode == Mode.Falling || mode == Mode.Napping) { stroke.TipInside = false; continue; }
+                if (Poked(hand, stroke, reach) && Time.time > reactCooldown) { React("glitch", "perch_glitch", Pick(PokeLines)); return; }
+                bool overHead = Vector3.Distance(hand.Position, HeadPoint) < Mathf.Max(0.15f, size * 0.3f);
+                if (Patting(hand, stroke, overHead))
                 {
-                    petHeld += Time.deltaTime;
-                    if (petHeld > 0.6f && Sulking) { petHeld = 0; MakeUp(PatPeaceLines); return; }
-                    if (petHeld > 0.6f && Time.time > reactCooldown) { petHeld = 0; React("grin", "perch", Pick(PetLines)); return; }
+                    if (Sulking) { MakeUp(PatPeaceLines); return; }
+                    if (Time.time > reactCooldown) { React("grin", "perch", Pick(PetLines)); return; }
                 }
             }
         }
@@ -431,8 +515,12 @@ namespace CapriRoom
         {
             reactCooldown = Time.time + 4f;
             Voice(line);
-            bool perched = standingOn != null && standingOn.Edge;
-            if (perched) { Play(perchedClip, false, delegate { if (mode == Mode.Perched) Play("perch", true); }); return; }
+            if (Resting)
+            {
+                // Sit 1 has its own reactions; lying down or in sit 2 she just answers and stays put.
+                if (seat == Seat.Sit1) Play(perchedClip, false, delegate { if (mode == Mode.Perched) Play(SeatClip, true); });
+                return;
+            }
             mode = Mode.Reacting;
             Play(standingClip, false, Rest);
         }
@@ -442,7 +530,8 @@ namespace CapriRoom
             lastAttention = Time.time;
             bool perched = standingOn != null && standingOn.Edge;
             if (!perched) return;
-            mode = Mode.Perched;   // she bops along sitting down
+            mode = Mode.Perched;   // she bops along sitting up
+            seat = Seat.Sit1;
             Play(clip != null && clip.Name == "perch_music" ? "perch" : "perch_music", true);
         }
 
@@ -452,6 +541,7 @@ namespace CapriRoom
             holder = hand;
             mode = Mode.Held;
             standingOn = null;
+            seat = Seat.Sit1;
             thrown = false;
             spin = spinRate = 0;
             Play("dangle", true);
@@ -617,10 +707,11 @@ namespace CapriRoom
             standingOn = ledge;
             transform.position = ledge.Point;
             mode = Mode.Perched;
+            seat = Seat.Sit1;
             // She stays a good while where you put her.
             perchUntil = Time.time + 2 * UnityEngine.Random.Range(secondsSittingOnFurniture.x, secondsSittingOnFurniture.y);
             nextBlink = Time.time + UnityEngine.Random.Range(2.5f, 6f);
-            Play("perch_glitch", false, delegate { if (mode == Mode.Perched) Play("perch", true); });
+            Play("perch_glitch", false, delegate { if (mode == Mode.Perched) Play(SeatClip, true); });
         }
 
         // ---------- Settings ----------
@@ -671,9 +762,8 @@ namespace CapriRoom
         {
             CapriConfig.MicMuted = !CapriConfig.MicMuted;
             settings.Refresh();
-            if (CapriConfig.MicMuted) Say("Mic muted. I'll just read your lips. Kidding.");
-            else if (!ears.Ready) Say("Mic's on, but I need a key to hear you. Press Y, then VOICE > Hearing. Groq's is free.");
-            else Say("I'm listening, choom.");
+            // Shown on the mic's own label: what she's saying keeps going, in her voice and her bubble.
+            micTag.Say(CapriConfig.MicMuted ? "Mic off" : ears.Ready ? "Mic on" : "Mic on: add a Hearing key (Y > VOICE)", 2.5f);
         }
 
         // ---------- Conversation ----------
@@ -689,6 +779,7 @@ namespace CapriRoom
         {
             lastAttention = Time.time;
             if (Sulking && SorryWords.IsMatch(said)) { MakeUp(SorryLines); return; }
+            if (Command(said)) return;
             if (!brain.Ready) { Say("My brain's offline. Press Y and set one up under BRAIN."); return; }
             if (mode == Mode.Napping) { mode = Mode.Waking; Play("wake", false, Rest); }
             bubble.Say("...", 20);
@@ -705,6 +796,96 @@ namespace CapriRoom
                 Debug.Log("[Capri] Looking: sent a " + picture.Length / 1024 + " KB picture");
             }
             brain.Reply(said, false, Talk, line => Say(line), picture);
+        }
+
+        // "Sit by me", "lay by me", "lay down", "sit up", "stand up", "come here": she does it right away. Sulking she
+        // won't, and while you're holding or throwing her it's left for her brain to answer.
+        private bool Command(string said)
+        {
+            bool layBy = LayByMe.IsMatch(said), sitBy = !layBy && SitByMe.IsMatch(said);
+            bool layDown = !layBy && !sitBy && LayDown.IsMatch(said);
+            bool sitUp = !layBy && !sitBy && !layDown && SitUp.IsMatch(said);
+            bool standUp = !layBy && !sitBy && !layDown && !sitUp && StandUp.IsMatch(said);
+            bool come = !layBy && !sitBy && !layDown && !sitUp && !standUp && ComeOver.IsMatch(said);
+            if (!(layBy || sitBy || layDown || sitUp || standUp || come)) return false;
+            if (mode == Mode.Held || mode == Mode.Falling || mode == Mode.GlitchingIn || mode == Mode.GlitchingOut || mode == Mode.Waiting) return false;
+            if (Sulking) { sulkBothered = Time.time; Voice(Pick(DodgeLines)); return true; }
+            if (mode == Mode.Napping || mode == Mode.Waking) { mode = Mode.Idle; }
+            if (layBy) GoByYou(Seat.Lay);
+            else if (sitBy) GoByYou(UnityEngine.Random.value < 0.5f ? Seat.Sit1 : Seat.Sit2);
+            else if (layDown) LieHere();
+            else if (sitUp) SitHere();
+            else if (standUp) StandHere();
+            else ComeToYou();
+            return true;
+        }
+
+        // The ledge nearest you, then lie or sit on it. No ledge near you: she lies on the floor beside you, or for sitting
+        // just comes and stands there.
+        private void GoByYou(Seat want)
+        {
+            Vector3 you = hands.Head.position;
+            Surface ledge = room.LedgeNearYou(you, stayWithin);
+            commanded = true;
+            if (ledge != null)
+            {
+                if (want == Seat.Lay && !RoomSense.FitsLying(ledge, size)) { want = UnityEngine.Random.value < 0.5f ? Seat.Sit1 : Seat.Sit2; Voice(Pick(NoRoomLines)); }
+                else Voice(Pick(OnMyWayLines));
+                GlitchTo(ledge, want);
+                return;
+            }
+            Vector3 beside = you + RoomSense.Flat(hands.Head.forward).normalized * 0.7f + RoomSense.Flat(hands.Head.right).normalized * 0.4f;
+            Voice(want == Seat.Lay ? "No furniture near you. Floor it is." : "Nowhere to sit near you, so I'll stand right here.");
+            GlitchTo(new Surface { Point = room.FloorSpot(beside, 0.25f) }, want == Seat.Lay ? Seat.Lay : Seat.Sit1);
+        }
+
+        // "Lay down" where she is: on a ledge with room, or on the floor.
+        private void LieHere()
+        {
+            bool edge = standingOn != null && standingOn.Edge;
+            if (Lying) return;
+            if (edge && !RoomSense.FitsLying(standingOn, size)) { Voice("Not enough room to lie down here."); return; }
+            if (edge) transform.position = RoomSense.LayPoint(standingOn, size);
+            if (standingOn != null && !standingOn.Edge) { Voice("Not here. Ask me to lay by you."); return; }
+            seat = Seat.Lay;
+            mode = Mode.Perched;
+            perchUntil = Time.time + 2 * UnityEngine.Random.Range(secondsSittingOnFurniture.x, secondsSittingOnFurniture.y);
+            Play("lay", true);
+        }
+
+        // "Sit up": from lying on a ledge back to sitting. On the floor there's nothing to sit on, so she stands.
+        private void SitHere()
+        {
+            bool edge = standingOn != null && standingOn.Edge;
+            if (edge) { seat = UnityEngine.Random.value < 0.5f ? Seat.Sit1 : Seat.Sit2; mode = Mode.Perched; Play(SeatClip, true); return; }
+            if (Lying) { StandHere(); return; }
+            Voice("Nothing to sit on here. Say sit by me.");
+        }
+
+        // "Stand up": off the floor she just gets up; on a ledge she hops down to the floor.
+        private void StandHere()
+        {
+            bool edge = standingOn != null && standingOn.Edge;
+            if (edge) { GlitchTo(new Surface { Point = room.FloorSpot(transform.position, 0.6f) }); return; }
+            seat = Seat.Sit1;
+            Rest();
+        }
+
+        // "Come here": close by on the floor she walks over, otherwise she glitches over to you.
+        private void ComeToYou()
+        {
+            Vector3 front = hands.Head.position + RoomSense.Flat(hands.Head.forward).normalized * 0.8f;
+            Vector3 spot = room.FloorSpot(front, 0.25f);
+            bool onFloor = standingOn == null && !Lying;
+            if (onFloor && RoomSense.Flat(spot - transform.position).magnitude < 3f)
+            {
+                Voice(Pick(OnMyWayLines));
+                walkTarget = spot;
+                mode = Mode.Walking;
+                Play("walk", true);
+                return;
+            }
+            ComeHere();
         }
 
         // Watch me: now and then she glances through your Quest's camera and says one short thing about what's in front of
@@ -851,8 +1032,10 @@ namespace CapriRoom
         {
             Vector3 away = RoomSense.Flat(transform.position - hands.Head.position);
             if (away.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(away, Vector3.up);
-            bubble.transform.position = transform.position + Vector3.up * (size * (standingOn != null && standingOn.Edge ? 0.75f : 1.08f) + 0.08f);
+            bubble.transform.position = transform.position + Vector3.up * (size * (Lying ? 0.55f : Resting ? 0.75f : 1.08f) + 0.08f);
             bubble.Face(hands.Head.position);
+            micTag.transform.position = bubble.transform.position + Vector3.up * 0.13f;
+            micTag.Face(hands.Head.position);
         }
 
         private void PlaceShadow()
@@ -862,7 +1045,7 @@ namespace CapriRoom
                 nextShadowCheck = Time.time + 0.1f;
                 shadowY = mode == Mode.Held || mode == Mode.Falling ? room.GroundBelow(transform.position + Vector3.up * 0.3f) : transform.position.y;
             }
-            bool perched = standingOn != null && standingOn.Edge;
+            bool perched = (standingOn != null && standingOn.Edge) || Lying;
             shadow.enabled = sprite.enabled && !perched;
             shadow.transform.position = new Vector3(transform.position.x, shadowY + 0.004f, transform.position.z);
             float height = Mathf.Max(0, transform.position.y - shadowY);
