@@ -224,6 +224,7 @@ namespace CapriRoom
                 case Mode.Napping: Nap(); break;
             }
 
+            RideShoulder();
             FaceYou();
             Pose();
             PlaceShadow();
@@ -265,7 +266,8 @@ namespace CapriRoom
         private void Pose()
         {
             if (clip == null || sprite.sprite == null) return;
-            body.localScale = Vector3.one * size;
+            bool flip = OnShoulder && (shoulderSide == 1) == FlipOnRightShoulder;
+            body.localScale = new Vector3(flip ? -size : size, size, size);
             Vector3 lift = clip.Name == "dangle" ? Vector3.up * DangleDrop * size : Vector3.zero;
             float turn = mode == Mode.Falling && thrown && CapriConfig.Motion ? spin : 0;
             float sway = Sway();
@@ -337,6 +339,78 @@ namespace CapriRoom
 
         private bool commanded;   // you told her where to go, so she stays a good while
 
+        // ---------- Your shoulder ----------
+        // She can sit (sit 1) on your shoulder: put her there, or she wanders there now and then if "Wander onto my
+        // shoulder" is on. The spot follows the way your headset faces, so turning your head carries her round with you.
+        private readonly Surface shoulder = new Surface { Raised = true, Edge = true };
+        private int shoulderSide = 1;                         // 1 your right shoulder, -1 your left
+        private const float ShoulderDown = 0.28f, ShoulderOut = 0.17f, ShoulderAhead = 0.07f, ShoulderChance = 0.25f;
+        private const float ShoulderTurn = 5f;                // turned this many degrees toward the way your headset faces
+        private const bool FlipOnRightShoulder = true;        // which shoulder she's mirrored on, so her legs point outward
+        private bool OnShoulder { get { return standingOn != null && standingOn == shoulder; } }
+
+        // Your shoulders don't turn with your head: her spot stays put while you turn your head to look at her, and only
+        // swings round with you once your head is more than 45 degrees from it, like you turning your whole body.
+        private const float ShoulderFollowAfter = 45f;
+        private float bodyYaw;
+
+        private float HeadYaw()
+        {
+            Vector3 ahead = RoomSense.Flat(hands.Head.forward);
+            if (ahead.sqrMagnitude < 0.0001f) ahead = RoomSense.Flat(-hands.Head.up);   // looking straight up or down
+            return Mathf.Atan2(ahead.x, ahead.z) * Mathf.Rad2Deg;
+        }
+
+        private void TurnBody()
+        {
+            float head = HeadYaw();
+            float off = Mathf.DeltaAngle(bodyYaw, head);
+            if (Mathf.Abs(off) > ShoulderFollowAfter) bodyYaw = head - Mathf.Sign(off) * ShoulderFollowAfter;
+        }
+
+        private Vector3 ShoulderPoint(int side)
+        {
+            Vector3 head = hands.Head.position;
+            float yaw = OnShoulder ? bodyYaw : HeadYaw();   // not on it yet: your body faces where your head does
+            Vector3 ahead = Quaternion.Euler(0, yaw, 0) * Vector3.forward;
+            Vector3 right = Vector3.Cross(Vector3.up, ahead);
+            // Small, she sits a little forward so she's in view; the bigger she is, the closer she sits to your shoulder.
+            float forward = ShoulderAhead * Mathf.InverseLerp(1f, 0.2f, size);
+            return head - Vector3.up * ShoulderDown + right * (side * ShoulderOut) + ahead * forward;
+        }
+
+        private void GoToShoulder()
+        {
+            bodyYaw = HeadYaw();
+            shoulderSide = UnityEngine.Random.value < 0.5f ? 1 : -1;
+            shoulder.Point = ShoulderPoint(shoulderSide);
+            GlitchTo(shoulder, Seat.Sit1);
+        }
+
+        // Let go of her right by your shoulder and she sits there.
+        private bool DroppedOnShoulder(Vector3 at)
+        {
+            for (int side = -1; side <= 1; side += 2)
+            {
+                if (Vector3.Distance(at, ShoulderPoint(side)) > 0.22f) continue;
+                shoulderSide = side;
+                shoulder.Point = ShoulderPoint(side);
+                bodyYaw = HeadYaw();
+                SitOn(shoulder);
+                return true;
+            }
+            return false;
+        }
+
+        // Every frame on your shoulder: stay on it as you move and turn.
+        private void RideShoulder()
+        {
+            if (!OnShoulder) return;
+            TurnBody();
+            shoulder.Point = ShoulderPoint(shoulderSide);
+            transform.position = shoulder.Point;
+        }
+
         private void GlitchTo(Surface to, Seat rest = Seat.Sit1)
         {
             arriveAs = rest;
@@ -357,6 +431,7 @@ namespace CapriRoom
         {
             nextWander = Time.time + UnityEngine.Random.Range(secondsBetweenWanders.x, secondsBetweenWanders.y);
             Vector3 you = hands.Head.position;
+            if (CapriConfig.ShoulderRides && !OnShoulder && UnityEngine.Random.value < ShoulderChance) { GoToShoulder(); return; }
             if (UnityEngine.Random.value < chanceToSitOnFurniture)
             {
                 Surface ledge = room.FurnitureSpot(you, stayWithin + 0.5f);
@@ -490,7 +565,7 @@ namespace CapriRoom
                 if (!hand.Tracked) continue;
                 float reach = Mathf.Max(0.18f, size * 0.45f);
                 float fromMiddle = Vector3.Distance(hand.Position, MiddlePoint);
-                if (fromMiddle < 0.6f) lastAttention = Time.time;
+                if (fromMiddle < 0.6f && !OnShoulder) lastAttention = Time.time;   // on your shoulder your hands are always near
 
                 // Y (left controller) opens and closes her settings. X mutes and unmutes her mic.
                 if (hand.ButtonTwoDown && hand.Left) { settings.Toggle(hands.Head); return; }
@@ -565,6 +640,8 @@ namespace CapriRoom
                 velocity = Vector3.ClampMagnitude(holder.Velocity, ThrowMost);
                 float fast = velocity.magnitude;
                 if (fast >= ThrowFrom) { Launch(fast); return; }
+                // Put down by your shoulder: she sits on it.
+                if (DroppedOnShoulder(transform.position + Vector3.up * DangleDrop * size * 0.5f)) return;
                 // Put down gently beside the edge of a table, couch or bed: she sits on it.
                 Surface ledge = room.LedgeNear(transform.position + Vector3.up * DangleDrop * size * 0.5f, 0.3f);
                 if (ledge != null) { SitOn(ledge); return; }
@@ -709,6 +786,7 @@ namespace CapriRoom
         {
             sulkSince = -1;
             throwsAt.Clear();
+            sulkLine = false;   // made up before she landed from the last throw: don't say a sulk line when she lands
             Voice(Pick(lines));
         }
 
@@ -772,7 +850,7 @@ namespace CapriRoom
         {
             CapriConfig.MicMuted = !CapriConfig.MicMuted;
             settings.Refresh();
-            // Shown on the mic's own label: what she's saying keeps going, in her voice and her bubble.
+            // size on the mic's own label: what she's saying keeps going, in her voice and her bubble.
             micTag.Say(CapriConfig.MicMuted ? "Mic off" : ears.Ready ? "Mic on" : "Mic on: add a Hearing key (Y > VOICE)", 2.5f);
         }
 
@@ -1081,6 +1159,13 @@ namespace CapriRoom
         {
             Vector3 away = RoomSense.Flat(transform.position - hands.Head.position);
             if (away.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(away, Vector3.up);
+            if (OnShoulder)
+            {
+                // Upright (never tipped toward your eyes when you look down) and fixed to your shoulders, not your head: she
+                // faces the way she would from your eyes with your head straight, turned a few degrees toward the front.
+                float toHer = Mathf.Atan2(shoulderSide * ShoulderOut, ShoulderAhead * Mathf.InverseLerp(1f, 0.2f, size)) * Mathf.Rad2Deg;
+                transform.rotation = Quaternion.Euler(0, bodyYaw + toHer - shoulderSide * ShoulderTurn, 0);
+            }
             if (Lying && standingOn != null && standingOn.Edge)
             {
                 Vector3 along = RoomSense.Flat(standingOn.EdgeTo - standingOn.EdgeFrom);

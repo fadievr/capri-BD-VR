@@ -70,6 +70,7 @@ namespace CapriRoom
         public static readonly string[] WanderNames = { "Off", "Rarely", "Sometimes", "Often" };
         public static readonly Vector2[] WanderGaps = { Vector2.zero, new Vector2(30, 60), new Vector2(8, 20), new Vector2(4, 9) };
         public static int Wander { get { return Get("wander2", 2); } set { Set("wander2", value); } }
+        public static bool ShoulderRides { get { return Get("shoulder", 1) == 1; } set { Set("shoulder", value ? 1 : 0); } }
         public static readonly string[] SleepNames = { "Never", "1 min", "2 min", "5 min", "10 min" };
         public static readonly float[] SleepSeconds = { 0, 60, 150, 300, 600 };
         public static int Sleep { get { return Get("sleep", 2); } set { Set("sleep", value); } }

@@ -1,5 +1,14 @@
 # Capri Room patch notes
 
+## v1.0.6 (2026-11-12)
+
+**Added**
+- Buttons with bare hands: tap your middle finger to your thumb for B (right hand) or Y (left), your ring finger for A (right) or X (left). Pinching your index finger still grabs her and never presses a button.
+- She can sit on your shoulder (sit 1, a bit smaller): let go of her right by your shoulder, or turn on "Wander onto my shoulder" (Habits, under Wander) and she sometimes wanders there. She stays upright and comes with you as you walk. Turning your head to look at her doesn't move her: she only swings round once your head is more than 45 degrees from her, like you turning your whole body. On your right shoulder she's mirrored.
+
+**Fixed**
+- Saying sorry or patting her while she was still in the air from the throw that started her sulk: she made up, then still said a sulk line when she landed. Now she doesn't.
+
 ## v1.0.5 (2026-11-06)
 
 **Added**

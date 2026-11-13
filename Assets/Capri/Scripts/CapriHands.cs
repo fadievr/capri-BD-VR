@@ -20,6 +20,8 @@ namespace CapriRoom
         public Vector3 PointFrom, PointAlong;
         public bool Clicked;
         public bool Controller;
+        public bool PcOneWas, PcTwoWas, PcTriggerWas;   // last frame's buttons, for PC VR presses
+        public bool MiddlePinched, RingPinched;          // tracked hands: finger-to-thumb pinches held right now
 
         // What she gets poked with: your index fingertip with tracked hands, the controller itself otherwise.
         public Vector3 Tip, TipVelocity;
@@ -61,6 +63,7 @@ namespace CapriRoom
         public Transform Head { get; private set; }
 
         private OVRCameraRig rig;
+        private CapriPcRig pcRig;     // PC VR (SteamVR / Index) instead of Meta's rig
         private OVRHand leftTracked, rightTracked;
         private float nextLookForHands;
 
@@ -71,7 +74,15 @@ namespace CapriRoom
             if (rig == null)
             {
                 rig = FindFirstObjectByType<OVRCameraRig>();
-                if (rig == null) return;
+                if (rig == null)
+                {
+                    if (pcRig == null) pcRig = FindFirstObjectByType<CapriPcRig>();
+                    if (pcRig == null || pcRig.head == null) return;
+                    Head = pcRig.head.transform;
+                    ReadPc(LeftHand, pcRig.leftHand, pcRig.Device(true));
+                    ReadPc(RightHand, pcRig.rightHand, pcRig.Device(false));
+                    return;
+                }
             }
             Head = rig.centerEyeAnchor;
             if ((leftTracked == null || rightTracked == null) && Time.time >= nextLookForHands)
@@ -85,6 +96,43 @@ namespace CapriRoom
             }
             Read(LeftHand, rig.leftHandAnchor, leftTracked, OVRInput.Controller.LTouch);
             Read(RightHand, rig.rightHandAnchor, rightTracked, OVRInput.Controller.RTouch);
+        }
+
+        // PC VR controllers (Valve Index, Vive, Touch over Link) through Unity's standard XR input.
+        // Index: grip squeeze grabs, trigger clicks, A/B are buttons one and two, the thumbstick scrolls.
+        private void ReadPc(HandState state, Transform anchor, UnityEngine.XR.InputDevice device)
+        {
+            bool on = device.isValid && anchor != null;
+            state.Tracked = on;
+            state.Controller = on;
+            if (anchor != null)
+            {
+                state.Track(anchor.position, anchor.position, Time.time);
+                state.PointFrom = anchor.position;
+                state.PointAlong = anchor.forward;
+            }
+            bool was = state.Grabbing;
+            float grip = 0f, trigger = 0f;
+            Vector2 stick = Vector2.zero;
+            bool one = false, two = false;
+            if (on)
+            {
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.grip, out grip);
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.trigger, out trigger);
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out stick);
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out one);
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out two);
+            }
+            state.Grabbing = on && (was ? grip > 0.35f : grip > 0.6f);
+            state.Thumbstick = stick.y;
+            state.ButtonOneDown = one && !state.PcOneWas;
+            state.ButtonTwoDown = two && !state.PcTwoWas;
+            state.Clicked = trigger > 0.7f && !state.PcTriggerWas;
+            state.PcOneWas = one;
+            state.PcTwoWas = two;
+            state.PcTriggerWas = trigger > (state.PcTriggerWas ? 0.4f : 0.7f);
+            state.GrabStarted = state.Grabbing && !was;
+            state.GrabEnded = !state.Grabbing && was;
         }
 
         // The hand anchor sits at your wrist, a hand's length from where you'd touch her, so use the hand's own bones:
@@ -105,6 +153,14 @@ namespace CapriRoom
             if (palmBone != null) palm = palmBone.position;
             else if (knuckle != null) palm = knuckle.position;
             if (tipBone != null) fingertip = tipBone.position;
+        }
+
+        // A finger touching the thumb: firm to start (0.85), let go once it's clearly apart (below 0.5).
+        private static bool Finger(bool on, OVRHand tracked, OVRHand.HandFinger finger, bool was)
+        {
+            if (!on) return false;
+            float strength = tracked.GetFingerPinchStrength(finger);
+            return was ? strength > 0.5f : strength > 0.85f;
         }
 
         private void Read(HandState state, Transform anchor, OVRHand tracked, OVRInput.Controller controller)
@@ -142,7 +198,16 @@ namespace CapriRoom
                 float pinch = handOn ? tracked.GetFingerPinchStrength(OVRHand.HandFinger.Index) : 0f;
                 state.Grabbing = was ? pinch > 0.5f : pinch > 0.85f;
                 state.Thumbstick = 0;
-                state.ButtonOneDown = state.ButtonTwoDown = false;
+                // Buttons with bare hands: tap your middle finger to your thumb for B (right) or Y (left), your ring
+                // finger for A (right) or X (left). Ignored while your index finger is pinching, so grabbing her never
+                // presses a button by accident.
+                bool indexFree = pinch < 0.4f;
+                bool middle = Finger(handOn && indexFree, tracked, OVRHand.HandFinger.Middle, state.MiddlePinched);
+                bool ring = Finger(handOn && indexFree, tracked, OVRHand.HandFinger.Ring, state.RingPinched);
+                state.ButtonTwoDown = middle && !state.MiddlePinched;
+                state.ButtonOneDown = ring && !state.RingPinched && !middle;
+                state.MiddlePinched = middle;
+                state.RingPinched = ring;
             }
             if (!state.Tracked) state.Grabbing = false;
             state.GrabStarted = state.Grabbing && !was;

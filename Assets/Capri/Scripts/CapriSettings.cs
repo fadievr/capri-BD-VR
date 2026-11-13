@@ -139,6 +139,7 @@ namespace CapriRoom
                     break;
                 case 3:
                     Choice(ref row, "Wander", CapriConfig.WanderNames, CapriConfig.Wander, v => CapriConfig.Wander = v);
+                    if (CapriConfig.Wander != 0) Toggle(ref row, "Wander onto my shoulder", CapriConfig.ShoulderRides, v => CapriConfig.ShoulderRides = v);
                     Choice(ref row, "Sleep", CapriConfig.SleepNames, CapriConfig.Sleep, v => CapriConfig.Sleep = v);
                     Choice(ref row, "Pop-ins", CapriConfig.PopNames, CapriConfig.PopIns, v => CapriConfig.PopIns = v);
                     Choice(ref row, "Size", CapriConfig.SizeNames, pet.SizeIndex, pet.SetSizeIndex);
